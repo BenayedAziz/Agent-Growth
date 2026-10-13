@@ -9,6 +9,7 @@ marketing. Vulgariser n'est donc pas de la mise en forme : c'est la
 fonctionnalité.
 
 Périmètre et ordre des lots : [docs/FEATURES.md](docs/FEATURES.md).
+Marché, concurrence, tarifs : [docs/ETUDE-MARCHE.md](docs/ETUDE-MARCHE.md).
 Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
 [docs/DECISIONS.md](docs/DECISIONS.md).
 
@@ -29,9 +30,16 @@ Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
    (`scripts/vendor-skill.sh`) et écrire le pont. L'ingénierie se concentre sur
    les trois choses qu'aucune librairie ne fait — appliquer sur le vrai site,
    le reporting de livraison, la couche locale française (ADR-009).
-7. **Chaque outil se juge en heures de livraison par client et par mois.** Le
-   modèle est un abonnement à prix bas avec un humain derrière : le prix ne peut
-   pas monter, donc seul le temps est ajustable (ADR-008).
+7. **Chaque outil se juge en heures de livraison par client et par mois.**
+   C'est la contrainte du modèle : le temps par client est la seule variable
+   ajustable (ADR-008, ADR-010).
+8. **Tout contenu généré qui part chez un client européen est signalé et marqué
+   de façon lisible par machine.** L'article 50 de l'AI Act est en vigueur
+   depuis le 2 août 2026. Ça vit dans le pipeline de publication, pas dans les
+   CGV (ADR-011).
+9. **On mène avec le GEO/AEO, pas avec le SEO.** Le CTR organique perd 58-61 %
+   sur les requêtes à réponse IA et l'effet accélère ; le GEO est la catégorie
+   la mieux payée du marché (ADR-010, docs/ETUDE-MARCHE.md).
 
 ## Structure
 

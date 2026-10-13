@@ -142,9 +142,21 @@ Relancer l'analyse sans perdre les corrections humaines.
 
 ---
 
-## Lot 1 — Réduire l'heure de livraison
+## Lot 1 — Réduire l'heure de livraison, et mener avec le GEO
 
-C'est le lot qui crée la marge. Rien d'autre ne passe devant.
+C'est le lot qui crée la marge et qui porte l'argument de vente. Rien d'autre
+ne passe devant. L'ordre vient de [l'étude de marché](ETUDE-MARCHE.md).
+
+### ⬜ `geo-audit` — être cité par les IA
+
+**Promu en tête : c'est désormais l'argument principal de l'offre** (ADR-010).
+Le CTR organique perd 58 à 61 % sur les requêtes à réponse IA, et l'effet
+accélère ; le retainer médian GEO/AEO est à 6 850 $/mois, +66 % en deux ans.
+
+Interroger les assistants (ChatGPT, Claude, Perplexity, AI Overviews) sur les
+requêtes de l'ICP, relever qui est cité et avec quelle formulation, puis
+produire les correctifs : données structurées, pages de définition, présence
+dans les sources que les IA citent réellement.
 
 ### ⬜ `site-publish` / `seo-fix` — appliquer sur le vrai site
 
@@ -172,7 +184,13 @@ qu'automatiser à l'aveugle.
 
 ### ⬜ `report` — ce qui a été fait, ce que ça a rapporté
 
-Le reporting mensuel est du temps non facturable pur. L'automatiser est de la
+**Priorité haute, et pas pour la raison qu'on croyait :** des rapports de
+performance réguliers sont corrélés à une rétention supérieure de **38 %**
+(étude sur ~200 k comptes PME, voir l'étude de marché). Ce n'est pas de
+l'automatisation de confort, c'est le deuxième levier de rétention après le
+nombre de produits.
+
+Le reporting mensuel est aussi du temps non facturable pur. L'automatiser est de la
 marge directe, et c'est aussi ce qui **fait progresser les chiffrages** : chaque
 écart entre l'estimation annoncée et le réel corrige une hypothèse du prochain
 `brand-core`.
@@ -239,6 +257,12 @@ notre ligne éditoriale francophone.
 Variantes d'accroche et de visuel confrontées avant diffusion, avec l'écart au
 brand-core mesuré. Écarte les ratés évidents ; ne prédit pas les succès, et
 l'affiche (ADR-007).
+
+### ⬜ `ai-marking` — signaler et marquer les contenus générés
+
+Obligation en vigueur depuis le 2 août 2026 (article 50 de l'AI Act). Vit dans
+le pipeline de publication, pas dans les CGV. Transverse à `site-publish` et
+`social-publish` (ADR-011).
 
 ### ⬜ `coherence-check` — le gardien
 

@@ -151,9 +151,9 @@ sur ses propres accroches, et il a raison de le dire.
 
 ---
 
-## ADR-008 — Se placer dans le trou de marché : français, TPE/PME, prix bas, humain inclus
+## ADR-008 — Se placer dans le trou de marché : français, TPE/PME, humain inclus
 
-*2026-10-13 · adopté*
+*2026-10-13 · adopté · **tarification amendée par ADR-010***
 
 **Problème.** Le marché est-il déjà pris ? Deux concurrents directs ont été
 examinés.
@@ -259,3 +259,93 @@ minutes n'est pas un détail d'ergonomie, c'est ce qui rend l'onboarding possibl
 **Précaution.** Vendoriser reste copier-et-épingler après relecture
 (ADR-004). Ces dépôts cumulent 1 000+ commits et des contributions externes
 ouvertes : une mise à jour non relue change le comportement du produit.
+
+---
+
+## ADR-010 — Mener avec le GEO, tarifer 500-5 000 €, et ne pas reconstruire GoHighLevel
+
+*2026-10-13 · adopté · amende ADR-008 sur la tarification*
+
+Appuyé sur [l'étude de marché](ETUDE-MARCHE.md), qui porte les sources.
+
+**1. L'offre mène avec le GEO/AEO, plus avec le SEO.**
+
+Le CTR organique chute de 58 à 61 % quand une réponse IA s'affiche, et l'effet
+accélère : Ahrefs mesure −34,5 % puis −58 % en un an sur la même métrique, et
+près d'une requête sur deux est désormais concernée. Pendant ce temps, le
+retainer médian GEO/AEO est à 6 850 $/mois, en hausse de 66 % depuis début 2024.
+
+Promettre « du trafic Google » vend un actif en fonte, et le client le
+constatera vers le sixième mois — précisément quand le risque de départ est
+maximal. Le SEO technique reste traité, mais comme un acquis, pas comme
+l'argument.
+
+**2. Tarification : 500 à 5 000 €/mois, indexée sur les pages, l'accompagnement
+et les offres activées.** Amende le « 100-400 €/mois » d'ADR-008.
+
+La raison n'est pas commerciale, elle est arithmétique. Acquérir un client PME
+coûte entre 141 $ (recommandation) et 1 980 $ (prospection sortante), médiane
+services B2B ~1 840 $. À 250 €/mois sur 24 mois, le ratio valeur-vie / coût
+d'acquisition tombe à 3,3:1 — et à 1,6:1 si le client ne reste qu'un an. À
+1 500 €/mois, il est à 19,6:1, ce qui finance un appel de vente, une démo, et
+de la publicité. **Un prix bas interdit d'acquérir ; c'est le prix qui rend le
+scale possible, pas l'inverse.**
+
+Le ticket d'entrée à 5 000 € reste écarté : la référence de marché pour une
+mise en place est de 200 à 500 $. On retient 490-990 € une fois.
+
+**3. On ne reconstruit pas la plateforme centralisée.**
+
+GoHighLevel vend déjà exactement ça : 297 $/mois en marque blanche, 497 $/mois
+avec caisse Stripe, création automatique des sous-comptes et refacturation à sa
+propre marge, ~75 % de marge brute pour l'agence. Vendasta propose 250+ produits
+martech en marque blanche. Leur fossé n'est pas l'IA, c'est l'étendue des
+intégrations — des années-hommes.
+
+En revanche aucun des deux ne fait ce qu'on fait : brand-core depuis un crawl,
+GEO/AEO, correctifs appliqués sur le vrai site, marquage de contenu conforme à
+l'AI Act. **On construit la couche qui leur manque, quitte à tourner au-dessus
+d'eux.** Et le scale réel, à terme, c'est de leur vendre cette couche — 100
+agences à 300 €/mois sans aucune livraison client — mais pas avant de l'avoir
+prouvée sur de vrais clients.
+
+**4. La spécialisation métier devient la décision structurante.**
+
+Elle améliore simultanément les trois variables du modèle : la marge (le
+deuxième client d'un même métier coûte la moitié du temps du premier), la
+rétention (corrélation établie sur ~200 k comptes PME) et l'acquisition (la
+recommandation est le canal le moins cher, à 141-200 $, et elle circule à
+l'intérieur d'un métier). Aucune ligne de code ne produit un effet comparable.
+
+**5. Le palier bas est une porte d'entrée, pas un produit.**
+
+Wix embarque déjà un assistant SEO et la génération automatique de balises ;
+Shopify a Sidekick et Magic. C'est le palier à 490 € qu'ils rendront gratuit en
+premier. À surveiller trimestriellement : si l'un d'eux publie un module
+GEO/AEO correct inclus, toute la grille doit remonter.
+
+---
+
+## ADR-011 — Le marquage des contenus générés est une fonctionnalité, pas une mention légale
+
+*2026-10-13 · adopté*
+
+**Contrainte.** L'article 50 de l'AI Act européen est **en vigueur depuis le
+2 août 2026**. Tout système qui génère du texte, de l'image, de l'audio ou de
+la vidéo doit signaler ces contenus, quel que soit son niveau de risque, et les
+marquer de façon lisible par machine — les systèmes antérieurs au 2 août
+bénéficient d'un délai jusqu'au 2 décembre 2026. Les obligations haut risque
+sont reportées à décembre 2027 et août 2028.
+
+**Décision.** Tout outil qui publie du contenu pour une marque européenne
+produit le signalement et le marquage. Ça se construit dans le pipeline de
+publication (`site-publish`, `social-publish`), pas dans les conditions
+générales.
+
+**Et c'est un argument commercial.** Okara est singapourienne, Collision
+américaine. Savoir expliquer sa conformité à un dirigeant français ou allemand
+est un avantage qui ne s'improvise pas.
+
+**Réserve.** Les sources sont des cabinets juridiques et des blogs
+spécialisés, pas le Journal officiel. À faire valider par un juriste avant tout
+engagement contractuel envers un client.
