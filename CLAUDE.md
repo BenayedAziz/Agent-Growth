@@ -24,6 +24,14 @@ Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
    uniquement. Le risque porte sur le compte du client (ADR-006).
 5. **Ce qu'on ne sait pas devient une question**, pas une invention plausible.
    Le schéma a `open_questions` et `confidence_note` pour ça.
+6. **Ne pas écrire ce qui existe déjà sous licence MIT.** Avant d'ouvrir un
+   fichier, vérifier si une skill publique le fait déjà. Si oui : vendoriser
+   (`scripts/vendor-skill.sh`) et écrire le pont. L'ingénierie se concentre sur
+   les trois choses qu'aucune librairie ne fait — appliquer sur le vrai site,
+   le reporting de livraison, la couche locale française (ADR-009).
+7. **Chaque outil se juge en heures de livraison par client et par mois.** Le
+   modèle est un abonnement à prix bas avec un humain derrière : le prix ne peut
+   pas monter, donc seul le temps est ajustable (ADR-008).
 
 ## Structure
 

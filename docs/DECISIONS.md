@@ -148,3 +148,114 @@ parle à personne.
 succès. Les outils affichent cette limite au lieu de la masquer derrière un
 score — c'est précisément ce que le dépôt Instagram examiné en ADR-004 mesure
 sur ses propres accroches, et il a raison de le dire.
+
+---
+
+## ADR-008 — Se placer dans le trou de marché : français, TPE/PME, prix bas, humain inclus
+
+*2026-10-13 · adopté*
+
+**Problème.** Le marché est-il déjà pris ? Deux concurrents directs ont été
+examinés.
+
+**Okara** (Singapour, 2025, 2-10 personnes, financement non divulgué). Lit le
+site, produit un document de stratégie, fait tourner des agents SEO, GEO,
+contenu, réseaux (Reddit, X, LinkedIn, Hacker News) et influence. Gratuit
+(20 crédits) puis 66 $/mois (2 000 crédits). Critiqué par une publication tech
+comme « buggy Claude wrapper », sorties de faible qualité, auto-posting Reddit
+et Hacker News à risque de ban. Source unique, aucun benchmark indépendant.
+
+**Collision** (`usecollision.com`, anglophone). « The AI you hire to run
+growth — replace your entire growth team. » Une conversation, **une mémoire,
+une source de vérité**, validation humaine sur chaque action, ~16 surfaces.
+Tarifs annoncés sur ses propres pages comparatives : 500-1 000 $/mois (Launch),
+2 000-6 000 $/mois (Growth), 8 000-15 000 $/mois (Scale). Pas de page de prix
+publique, contact = démo : vente assistée. Il écrit lui-même que son palier
+« se situe délibérément entre les outils de commodité et un growth hire humain
+à 5-25 k$/mois ».
+
+**La structure du marché qui en découle :**
+
+| Palier | Qui | Ce qu'on y trouve |
+| --- | --- | --- |
+| 0-70 €/mois | Okara et beaucoup d'autres | Une couche de rédaction. Qualité contestée. |
+| **100-400 €/mois** | **personne** | **le trou** |
+| 500-15 000 $/mois | Collision | Vente assistée, anglophone, startups et growth teams |
+| 5-25 k$/mois | growth hire humain | — |
+
+**Décision.** Se placer dans le trou : **abonnement à prix bas, en français,
+pour des TPE/PME, avec un humain responsable derrière.** Pas de ticket d'entrée
+à 5 000 € — il exclut la cible. Un frais d'installation modeste ou un engagement
+de quelques mois, pas davantage.
+
+**Pourquoi ce trou tient.** Collision ne descendra pas : il le dit lui-même, et
+sa vente assistée ne supporte pas un panier à 250 €. Okara ne montera pas : 2 à
+10 personnes, aucune capacité de service, et son modèle à 66 $/mois interdit
+toute heure humaine. Ni l'un ni l'autre n'est francophone, ni ne connaît la
+fiche Google Business d'un artisan, ni ne touchera au WordPress du client.
+
+**Ce qui n'est pas un différenciateur, contrairement à ce qu'on croyait.** La
+validation humaine obligatoire : Collision la met en avant exactement comme
+nous. Elle reste une bonne règle (ADR-006), elle ne reste pas un argument.
+
+---
+
+## ADR-009 — Ne pas écrire ce qui existe déjà sous licence MIT
+
+*2026-10-13 · adopté*
+
+**Constat.** La couche « savoir marketing » est abondante, gratuite et mieux
+maintenue que ce qu'on produirait.
+
+- **`coreyhaines31/marketingskills`** — ~40 skills MIT, 54,5 k étoiles,
+  8,1 k forks, 1 027 commits. Couvre `seo-audit`, `ai-seo`, `schema`,
+  `site-architecture`, `programmatic-seo`, `competitors`, `ads`, `ad-creative`,
+  `social`, `copywriting`, `cro`, `cold-email`, `emails`, `analytics`,
+  `ab-testing`, `content-strategy`, `launch`, `pricing`… Auteur crédible
+  (Conversion Factory, ex-Baremetrics).
+- **`VoltAgent/awesome-agent-skills`** — annuaire de 1 497+ skills, MIT,
+  35,6 k étoiles.
+
+**Le point qui fait mal.** Sa skill `product-marketing` crée
+`.agents/product-marketing.md` — produit, audience, personas, douleurs, paysage
+concurrentiel, différenciation, objections et anti-personas, dynamiques de
+bascule, langage client (mots à employer et à éviter), voix de marque, preuves,
+objectifs — et **« toutes les autres skills la consultent en premier »**.
+C'est notre ADR-001, avec 54,5 k étoiles et deux ans d'avance.
+
+**Donc : notre architecture n'est pas différenciante.** Il faut le dire au lieu
+de le contourner.
+
+**Ce qui reste réellement à nous :**
+
+| | `product-marketing` | notre `brand-core` |
+| --- | --- | --- |
+| Rempli par | un entretien, ou le dépôt de code | **un crawl du site et des concurrents** |
+| Forme | prose Markdown | **schéma typé et validé** |
+| Chiffrage | aucun | **fourchettes + hypothèses + origine, imposées par le schéma** |
+| Opportunités | aucune | **6 à 10, classées par rentabilité** |
+| Cible | marketeurs techniques, SaaS | **TPE/PME francophones, zéro connaissance** |
+| Langue | anglais | français |
+
+Le premier point est le plus important : un dirigeant de TPE ne remplira jamais
+un questionnaire en douze sections. Qu'on le génère depuis son site en deux
+minutes n'est pas un détail d'ergonomie, c'est ce qui rend l'onboarding possible.
+
+**Décision.**
+
+1. **Ne pas écrire** `seo-audit`, `ads`, `social`, `copywriting`, `cro`,
+   `cold-email`, `schema`, `programmatic-seo`, `competitors`, `ai-seo`,
+   `analytics`. Les vendoriser (`scripts/vendor-skill.sh`).
+2. **Écrire un pont** `brand-core` → `.agents/product-marketing.md`, pour que
+   ces skills héritent de la marque sans saisie. Un pont de quelques heures
+   débloque ~40 skills.
+3. **Reprendre d'elles ce qui est meilleur** : le versionnage avec journal des
+   changements, les anti-personas, les dynamiques de bascule (poussée,
+   attraction, habitude, anxiété), le langage client verbatim.
+4. **Concentrer l'ingénierie** sur les trois choses qu'aucune librairie de
+   skills ne fait : appliquer les corrections sur le vrai site, le reporting de
+   livraison, et la couche locale française (fiche Google Business, SEO local).
+
+**Précaution.** Vendoriser reste copier-et-épingler après relecture
+(ADR-004). Ces dépôts cumulent 1 000+ commits et des contributions externes
+ouvertes : une mise à jour non relue change le comportement du produit.

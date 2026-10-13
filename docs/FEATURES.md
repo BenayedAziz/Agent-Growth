@@ -31,7 +31,7 @@ mettre dans **un fichier que tous les outils lisent** : `brand-core.json`.
 Aucun outil ne redécide du ton. S'il en a besoin, il le lit. C'est ce qui rend
 la « cohérence globale » mécanique au lieu d'être un vœu.
 
-## Les six règles de conception
+## Les sept règles de conception
 
 Elles valent pour chaque outil ajouté au projet.
 
@@ -54,6 +54,10 @@ Elles valent pour chaque outil ajouté au projet.
 6. **Pré-tester avant de dépenser.** Jeter trois accroches coûte moins cher
    qu'une campagne qui ne parle à personne. Tout outil qui produit une création
    produit des variantes et les confronte avant diffusion.
+7. **Ne pas écrire ce qui existe déjà sous licence MIT.** Le savoir marketing
+   est abondant, gratuit et mieux maintenu que ce qu'on produirait (ADR-009).
+   Avant d'ouvrir un fichier, on vérifie si une skill le fait déjà. Si oui, on
+   la vendorise et on écrit le pont.
 
 ## État d'avancement
 
@@ -62,7 +66,32 @@ Elles valent pour chaque outil ajouté au projet.
 | ✅ | Livré et testé |
 | 🔜 | Prochain lot |
 | ⬜ | Planifié |
+| ♻ | **Ne pas écrire — vendoriser** (ADR-009) |
 | 🔒 | Bloqué par un accès externe (API, compte, contrat) |
+
+## La contrainte qui commande le périmètre
+
+Le modèle retenu est un abonnement à prix bas avec un humain responsable
+derrière (ADR-008). Dans ce modèle, la variable qui décide de tout n'est ni le
+prix ni le nombre de fonctionnalités : c'est **le nombre d'heures de livraison
+par client et par mois.**
+
+À 250 €/mois, une heure et demie de travail humain mensuel laisse une marge.
+Quatre heures n'en laissent aucune. Le prix de vente ne peut pas monter — c'est
+précisément le trou de marché qu'on occupe — donc la seule variable ajustable
+est le temps.
+
+**Conséquence : chaque outil se juge sur une seule question — combien d'heures
+par client et par mois est-ce que ça m'enlève ?** Un outil qui produit une
+analyse brillante une fois vaut moins qu'un outil qui supprime deux heures
+tous les mois. C'est ce critère qui a réordonné les lots ci-dessous, et non
+l'exhaustivité marketing.
+
+Le second levier est la **spécialisation sur un métier** : à secteur identique,
+les piliers, les clusters SEO, les concurrents et les objections se réutilisent
+d'un client à l'autre. Le deuxième client d'un même métier coûte la moitié du
+temps du premier. C'est le réducteur d'heures le plus puissant du modèle, et il
+ne demande aucune ligne de code.
 
 ---
 
@@ -73,106 +102,156 @@ Elles valent pour chaque outil ajouté au projet.
 Lit le site de la marque et ceux de ses concurrents, puis produit :
 
 - le positionnement et la catégorie dans laquelle le client la range ;
-- les ICP (clients idéaux), avec pour chacun **ce qu'il tape sur Google**
-  (matière du SEO) et **où il se trouve** (matière de l'outbound) ;
+- les ICP, avec pour chacun **ce qu'il tape sur Google** (matière du SEO) et
+  **où il se trouve** (matière de l'outbound) ;
 - l'analyse concurrentielle et l'espace laissé libre ;
 - la ligne éditoriale : mission, promesse, preuves, curseurs de ton, vocabulaire
   à employer et à bannir, piliers de contenu avec leur part de voix, formats
   signature, interdits ;
 - les angles différenciants, avec la preuve à réunir et le risque ;
 - **6 à 10 opportunités chiffrées** par canal, classées par rentabilité ;
-- les questions ouvertes — ce qui n'a pas pu être déduit et qu'il faut demander.
+- les questions ouvertes — ce qui n'a pas pu être déduit.
 
-Produit trois fichiers : `brand-core.json` (le contrat), `brand-core.md` (le
-document que le client lit) et `voice.md` (la fiche de voix que les outils de
-rédaction consomment).
+Produit `brand-core.json` (le contrat), `brand-core.md` (le document que le
+client lit) et `voice.md` (la fiche de voix des outils de rédaction).
 
-### 🔜 `brand-core refresh`
+Ce qui le distingue des documents de contexte équivalents (ADR-009) : il est
+**rempli par un crawl, pas par un entretien**. Un dirigeant de TPE ne remplira
+jamais un questionnaire en douze sections ; c'est ce qui rend l'onboarding
+possible, pas un confort d'ergonomie.
 
-Relancer l'analyse sans perdre les corrections humaines : le client amende son
-brand-core, ces amendements survivent au passage suivant.
+### 🔜 `brand-core export` — le pont vers les skills vendorisées
+
+**Le prochain outil à écrire, et de loin le meilleur rapport effort/effet.**
+
+Les librairies de skills marketing attendent conventionnellement un document de
+contexte partagé (`.agents/product-marketing.md`) que toutes consultent avant
+d'agir. `brand-core` possède déjà cette information, en mieux structuré.
+
+Un pont de quelques heures fait donc hériter **~40 skills** de la marque, sans
+aucune saisie du client. C'est le levier qui transforme un outil en couverture
+marketing complète.
+
+À reprendre d'elles au passage, parce que c'est meilleur que ce qu'on a :
+versionnage avec journal des changements, anti-personas, dynamiques de bascule
+(poussée, attraction, habitude, anxiété), langage client verbatim.
+
+### ⬜ `brand-core refresh`
+
+Relancer l'analyse sans perdre les corrections humaines.
 
 ---
 
-## Lot 1 — Être trouvé (inbound)
+## Lot 1 — Réduire l'heure de livraison
 
-C'est le lot prioritaire : c'est là que l'effet est le plus mécanique et le
-moins dépendant d'un budget média.
+C'est le lot qui crée la marge. Rien d'autre ne passe devant.
 
-### 🔜 `seo-audit`
+### ⬜ `site-publish` / `seo-fix` — appliquer sur le vrai site
 
-Audit technique et sémantique, à partir de ce que le crawler lit déjà
-(`ag inspect` en donne la base) : balises, structure, données structurées,
-vitesse, maillage interne, pages orphelines, cannibalisation. Chaque constat est
-traduit en « ce que ça vous coûte » plutôt qu'en score sur 100.
+**La seule pièce logicielle réellement défendable du projet.** Toutes les
+librairies de skills produisent des *recommandations* ; aucune ne touche au site
+du client, parce que ça demande des identifiants, des adaptateurs par
+plateforme et une responsabilité. C'est exactement pour ça que c'est un fossé.
 
-### 🔜 `seo-plan`
-
-Transforme les `search_intents` des ICP en clusters de contenu : une page
-pilier, ses pages satellites, l'intention derrière chacune, le volume estimé et
-la difficulté. Chaque sujet est relié à un pilier éditorial — si un sujet ne
-rentre dans aucun pilier, il n'est pas produit.
-
-### ⬜ `seo-fix` — corriger directement sur le site
-
-Le point techniquement le plus délicat du projet, et celui qui a le plus de
-valeur : appliquer les corrections sur le site réel, quelle que soit la
-plateforme. Conception retenue : un cœur commun (quoi corriger) et des
-adaptateurs par plateforme (comment l'appliquer).
+C'est aussi un poste d'heures récurrent : chaque contenu produit doit finir en
+ligne. Conception retenue : un cœur commun (quoi faire) et des adaptateurs par
+plateforme (comment l'appliquer).
 
 | Plateforme | Voie d'accès | Difficulté |
 | --- | --- | --- |
 | WordPress | API REST + mot de passe d'application | faible |
 | Shopify | Admin API | faible |
+| HTML / statique | dépôt Git + pull request | faible |
 | Webflow | API v2 | moyenne |
 | Wix | API partenaire | moyenne |
 | Squarespace | pas d'API d'écriture | ⚠ export de consignes manuelles |
-| HTML / statique | dépôt Git + pull request | faible |
 
 Tout ce qui n'a pas d'API d'écriture retombe sur un livrable de consignes
 précises. Dire « je ne peux pas, voilà exactement quoi faire » vaut mieux
 qu'automatiser à l'aveugle.
 
-### ⬜ `geo-audit` — être cité par les IA
+### ⬜ `report` — ce qui a été fait, ce que ça a rapporté
 
-Interroger les assistants (ChatGPT, Claude, Perplexity, AI Overviews) sur les
-requêtes de l'ICP, relever qui est cité et avec quelle formulation, puis
-produire les correctifs : données structurées, pages de définition, présence
-dans les sources que les IA citent réellement.
+Le reporting mensuel est du temps non facturable pur. L'automatiser est de la
+marge directe, et c'est aussi ce qui **fait progresser les chiffrages** : chaque
+écart entre l'estimation annoncée et le réel corrige une hypothèse du prochain
+`brand-core`.
 
-### ⬜ `gmb` — fiche Google Business
+### ⬜ `content-run` — l'enchaînement hebdomadaire
 
-Aligner la fiche sur la ligne éditoriale : catégories, description, attributs,
-photos, posts, réponses aux avis. Canal très rentable en local et presque
-toujours négligé.
+Orchestration, pas rédaction : prend les piliers et leur part de voix, appelle
+les skills vendorisées pour produire, passe par `site-publish`, et s'arrête à la
+validation humaine. C'est le poste d'heures le plus lourd du modèle parce qu'il
+revient chaque semaine.
 
 ---
 
-## Lot 2 — Publier (réseaux sociaux)
+## Lot 2 — La couche française et locale
 
-### ⬜ `social-plan`
+Ce que les librairies, toutes orientées SaaS anglophone, ignorent complètement.
+C'est donc à nous, et c'est ce que la cible achète vraiment.
 
-Calendrier éditorial dérivé des piliers et de leur part de voix. Le calendrier
-ne décide pas des sujets : il répartit les piliers dans le temps.
+### ⬜ `gmb` — fiche Google Business
 
-### ⬜ `social-write`
+Catégories, description, attributs, photos, posts, réponses aux avis, alignés
+sur la ligne éditoriale. Canal très rentable en local et presque toujours
+négligé.
 
-Rédaction par plateforme, en héritant de `voice.md`. **C'est ici qu'on branche
-les skills de rédaction existantes** plutôt que de les réécrire — voir
-[ARCHITECTURE.md](ARCHITECTURE.md#brancher-une-skill-externe) et la décision
-[ADR-004](DECISIONS.md#adr-004--réutiliser-les-skills-de-rédaction-existantes).
+### ⬜ `local-seo`
+
+Requêtes géolocalisées, pages par zone, annuaires et citations locales, données
+structurées `LocalBusiness`.
+
+### ⬜ `explain` — la couche pédagogique
+
+« Pourquoi me conseilles-tu ça ? », « c'est quoi un CPC ? », dans le contexte de
+la marque. Vulgariser est la fonctionnalité, pas la mise en forme.
+
+---
+
+## Lot 3 — Vendorisé, pas écrit
+
+Ces capacités existent sous licence MIT, maintenues par des praticiens plus
+crédibles et plus suivis que nous ne le serons (ADR-009). **Écrire nos versions
+serait des semaines de travail pour un résultat inférieur.**
+
+| ♻ Capacité | Statut |
+| --- | --- |
+| `seo-audit`, `ai-seo`, `schema`, `site-architecture`, `programmatic-seo` | à vendoriser |
+| `competitors`, `content-strategy`, `copywriting`, `copy-editing` | à vendoriser |
+| `ads`, `ad-creative`, `ab-testing`, `cro` | à vendoriser |
+| `social` | à vendoriser |
+| `cold-email`, `emails` | à vendoriser |
+| `analytics`, `launch`, `pricing` | à vendoriser |
+
+Procédure : `./scripts/vendor-skill.sh`, puis relecture avant activation
+(ADR-004). Ces dépôts cumulent plus de mille commits et acceptent des
+contributions externes : une mise à jour non relue change le comportement du
+produit.
+
+Deux réserves à garder en tête. Ces skills sont écrites pour le SaaS : tout ce
+qui touche aux paywalls, à l'activation d'essai ou au PLG ne concerne pas la
+cible. Et elles sont en anglais : les sorties destinées au client passent par
+notre ligne éditoriale francophone.
 
 ### ⬜ `pretest` — pré-tester les créations
 
-Avant diffusion : plusieurs variantes d'accroche et de visuel, confrontées entre
-elles sur l'attention probable et la justesse de ton, avec l'écart au brand-core
-mesuré. Ce n'est pas une boule de cristal : l'objectif est d'écarter les ratés
-évidents, pas de prédire un succès. L'outil affiche donc ce qu'il sait faire et
-ce qu'il ne sait pas faire.
+Variantes d'accroche et de visuel confrontées avant diffusion, avec l'écart au
+brand-core mesuré. Écarte les ratés évidents ; ne prédit pas les succès, et
+l'affiche (ADR-007).
+
+### ⬜ `coherence-check` — le gardien
+
+Compare ce que racontent le site, les réseaux, la fiche Google et les annonces,
+et signale les écarts à la ligne éditoriale. C'est l'outil qui rend la cohérence
+vérifiable au lieu d'être déclarative — et le contrepoids nécessaire à des
+skills externes qui, elles, ne connaissent que leur canal.
+
+---
+
+## Lot 4 — Bloqué par des accès, pas par du code
 
 ### 🔒 `social-publish`
-
-Publication effective. Le blocage n'est pas technique mais contractuel :
 
 | Réseau | Voie officielle | Ce qu'il faut |
 | --- | --- | --- |
@@ -182,83 +261,28 @@ Publication effective. Le blocage n'est pas technique mais contractuel :
 | X | API v2 payante | abonnement |
 | Pinterest | API v5 | app, revue |
 
-**L'automatisation non officielle est exclue** : publier, commenter, suivre ou
-envoyer des messages via un navigateur piloté viole les conditions
-d'utilisation d'Instagram et de LinkedIn, et fait fermer les comptes clients.
-Un compte client fermé est une faute professionnelle, pas un incident
-technique. Tant que l'accès officiel n'est pas en place, l'outil prépare le post
-et le remet à valider — ce qui est déjà l'essentiel du travail.
-
----
-
-## Lot 3 — Payer (publicité)
-
-### ⬜ `ads-plan`
-
-Mots-clés et audiences dérivés des ICP, structure de campagne, budget conseillé
-et estimations chiffrées (CPC, volume, coût par lead attendu) avec leurs
-hypothèses.
-
-### ⬜ `ads-create`
-
-Textes d'annonces et visuels, en variantes destinées au pré-test, conformes à la
-ligne éditoriale et aux interdits (`do_not_say`).
+**L'automatisation non officielle est exclue** (ADR-006). Okara illustre le
+risque : son auto-posting sur Reddit et Hacker News expose les comptes clients
+à un ban pour spam. Un compte client fermé n'est pas un incident technique.
 
 ### 🔒 `ads-launch` / `ads-pilot`
 
-Lancement et pilotage. Google Ads API et Meta Marketing API, avec plafond de
-dépense codé en dur et validation humaine obligatoire avant toute mise en ligne.
-Un agent qui dépense de l'argent sans porte de validation est un risque, pas une
-fonctionnalité.
+Google Ads API et Meta Marketing API, avec plafond de dépense codé en dur et
+validation humaine avant toute mise en ligne.
+
+### ⬜ `prospect-find` / `prospect-enrich` / `sequence-write`
+
+Le pont inbound/outbound est déjà dans le schéma : chaque ICP porte ses
+`search_intents` (ce qu'on publie pour être trouvé) et son `where_to_find_them`
+(où on va le chercher). Deux usages du même ciblage.
+
+**Cadre légal à traiter dès la conception** : le RGPD encadre la prospection
+B2B — base légale, mention d'information, droit d'opposition, conservation
+limitée. L'outil journalise l'origine de chaque contact et permet une
+suppression immédiate.
 
 ---
 
-## Lot 4 — Aller chercher (outbound)
-
-Le pont avec l'inbound est déjà posé dans `brand-core` : un ICP y porte à la
-fois ses `search_intents` (ce qu'on publie pour être trouvé) et son
-`where_to_find_them` (où on va le chercher). Deux usages du même ciblage.
-
-### ⬜ `prospect-find`
-
-Constituer une liste à partir de `where_to_find_them` : annuaires, sources
-publiques, critères de filtrage. **Cadre légal à traiter dès la conception, pas
-après** : en Europe, le RGPD encadre la prospection B2B — base légale, mention
-d'information, droit d'opposition, conservation limitée. L'outil doit journaliser
-l'origine de chaque contact et permettre une suppression immédiate.
-
-### ⬜ `prospect-enrich`
-
-Enrichissement et qualification contre l'ICP, avec un score et sa justification.
-
-### ⬜ `sequence-write`
-
-Séquences personnalisées écrites dans la ligne éditoriale. Un e-mail de
-prospection qui ne sonne pas comme la marque abîme la marque.
-
----
-
-## Transverse
-
-### ⬜ `coherence-check` — le gardien
-
-Compare ce que racontent le site, les réseaux, la fiche Google et les annonces,
-et signale les écarts à la ligne éditoriale. C'est l'outil qui rend la promesse
-de cohérence vérifiable au lieu d'être déclarative.
-
-### ⬜ `report` — ce qui a été fait, ce que ça a rapporté
-
-Journal des actions et résultats mesurés, avec la comparaison entre
-l'estimation annoncée et le réel. **Cette boucle est ce qui fait progresser les
-estimations** : chaque écart constaté corrige les hypothèses du prochain
-chiffrage.
-
-### ⬜ `explain` — la couche pédagogique
-
-« Pourquoi me conseilles-tu ça ? », « c'est quoi un CPC ? », à tout moment et
-dans le contexte de la marque.
-
----
 
 ## Hors périmètre, assumé
 
@@ -267,6 +291,11 @@ dans le contexte de la marque.
 - **Un outil de design.** On génère des visuels publicitaires, pas une identité
   visuelle complète.
 - **L'automatisation non officielle des réseaux.** Voir plus haut.
+- **Une librairie de skills marketing.** Elles existent, MIT, mieux suivies
+  (ADR-009). On les vendorise et on écrit le pont.
+- **Descendre à 66 €/mois sans humain.** C'est le palier d'Okara, où la qualité
+  se dégrade et où le client ne peut pas la juger. Le trou qu'on occupe est au
+  dessus, et il n'y est que parce qu'un humain y répond (ADR-008).
 - **Le conseil humain.** Agent Growth outille le consultant ; il ne le
   remplace pas. L'accompagnement humain reste une offre à part, et c'est ce qui
   justifie son prix.
