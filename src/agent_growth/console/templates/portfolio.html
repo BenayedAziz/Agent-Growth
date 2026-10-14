@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pill, delta, empty %}
+{% block title %}Portefeuille{% endblock %}
+{% block content %}
+
+<div class="flex items-baseline justify-between flex-wrap gap-2">
+  <h1 class="text-2xl font-semibold tracking-tight">Portefeuille</h1>
+  <p class="text-sm text-slate-500">{{ days }} derniers jours</p>
+</div>
+
+<section class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <p class="num text-2xl">{{ rows | length }}</p>
+    <p class="mt-1 text-sm text-slate-500">marques pilotées</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <p class="num text-2xl">{{ money.mrr | round(0) | int }} €</p>
+    <p class="mt-1 text-sm text-slate-500">revenu mensuel · {{ money.clients }} client{{ 's' if money.clients != 1 }}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <p class="num text-2xl {% if to_review %}text-amber-600 dark:text-amber-400{% endif %}">{{ to_review }}</p>
+    <p class="mt-1 text-sm text-slate-500">contenus à valider</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <p class="num text-2xl">{{ daily_spend | round(0) | int }} €</p>
+    <p class="mt-1 text-sm text-slate-500">dépense publicitaire par jour</p>
+  </div>
+</section>
+
+{% if unconnected %}
+<p class="mt-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-4 py-3 text-sm">
+  <strong>{{ unconnected }} canaux déclarés mais pas encore connectés.</strong>
+  Tant qu'ils ne le sont pas, aucune mesure ne remonte. <a href="/outils" class="underline">Voir les outils</a>.
+</p>
+{% endif %}
+
+<h2 class="mt-8 text-lg font-semibold">Marques</h2>
+
+{% if not rows %}
+  <div class="mt-3">
+  {{ empty("Aucune marque enregistrée",
+           "Ajoute-en une avec « ag brand add », ou importe une analyse existante avec « ag import-core brands/<marque>/brand-core.json ».") }}
+  </div>
+{% endif %}
+
+<div class="mt-3 grid gap-3">
+{% for r in rows %}
+  {% set b = r.brand %}
+  <article class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <h3 class="font-semibold">
+          <a href="/marque/{{ b.slug }}" class="hover:text-teal-700 dark:hover:text-teal-400">{{ b.name }}</a>
+          {% if b.kind == 'interne' %}{{ pill("interne", "idle") }}{% else %}{{ pill("client", "ok") }}{% endif %}
+          {% if b.status != 'actif' %}{{ pill(b.status, "warn") }}{% endif %}
+        </h3>
+        <p class="text-sm text-slate-500 truncate">{{ b.url }}</p>
+      </div>
+      <div class="text-right text-sm">
+        {% if b.monthly_fee_eur %}<p class="num">{{ b.monthly_fee_eur | round(0) | int }} €/mois</p>{% endif %}
+        <p class="text-slate-500">
+          {% if r.last_collected %}collecte&nbsp;: {{ r.last_collected }}{% else %}jamais collecté{% endif %}
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      {% for c in r.channels %}
+        {% set lbl, tone = state_labels.get(c.state, (c.state, 'idle')) %}
+        <span class="inline-flex items-center gap-1 rounded border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs">
+          {{ channel_labels.get(c.kind, c.kind) }}
+          <span class="{% if tone == 'ok' %}text-emerald-600 dark:text-emerald-400{% elif tone == 'bad' %}text-rose-600{% else %}text-slate-400{% endif %}">●</span>
+        </span>
+      {% else %}
+        <span class="text-xs text-slate-500">aucun canal déclaré</span>
+      {% endfor %}
+    </div>
+
+    {% if r.totals %}
+    <div class="mt-3 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase tracking-wide text-slate-500">
+          <th class="py-1 pr-3">Canal</th><th class="py-1 pr-3">Métrique</th>
+          <th class="py-1 pr-3 text-right">{{ days }} j</th><th class="py-1 text-right">Évolution</th>
+        </tr></thead>
+        <tbody>
+        {% for t in r.totals[:6] %}
+          <tr class="border-t border-slate-100 dark:border-slate-800">
+            <td class="py-1 pr-3">{{ channel_labels.get(t.channel, t.channel) }}</td>
+            <td class="py-1 pr-3 text-slate-500">{{ t.metric }}</td>
+            <td class="py-1 pr-3 text-right num">{{ t.current | round(0) | int }}</td>
+            <td class="py-1 text-right">{{ delta(t.current, t.previous) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="mt-3 text-sm text-slate-500">Pas encore de mesures. Elles arriveront dès qu'un canal sera connecté.</p>
+    {% endif %}
+  </article>
+{% endfor %}
+</div>
+
+{% if log %}
+<h2 class="mt-8 text-lg font-semibold">Dernières décisions</h2>
+<ul class="mt-3 divide-y divide-slate-200 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+{% for l in log %}
+  <li class="px-4 py-2 text-sm flex gap-3 flex-wrap">
+    <span class="num text-xs text-slate-500">{{ l.at[:16] | replace('T', ' ') }}</span>
+    <span class="font-medium">{{ l.action }}</span>
+    {% if l.brand_name %}<span class="text-slate-500">{{ l.brand_name }}</span>{% endif %}
+    {% if l.rationale %}<span class="text-slate-500">— {{ l.rationale }}</span>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% endblock %}

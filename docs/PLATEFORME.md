@@ -63,6 +63,7 @@ voir [ADR-012](DECISIONS.md#adr-012--le-produit-est-la-console-multi-marques-pas
 | **4. Contenu** | Calendrier dérivé des piliers, génération quotidienne, file de validation, publication | modules 1 et 2 |
 | **5. Publicité** | Créations en variantes, lancement, pilotage sous plafond de dépense | modules 1 et 2 |
 | **6. Rapport** | Rapport automatique par marque, écart entre estimation annoncée et réel | modules 2 et 3 |
+| **7. Prospection** | Sourcing, enrichissement, séquences personnalisées dans la voix de la marque | modules 1 et 2 |
 
 L'ordre n'est pas un goût : **2 avant 3 avant 4 et 5**. Sans collecte, la console
 est vide ; sans console, on produit à l'aveugle.
@@ -255,10 +256,34 @@ Dans l'ordre de probabilité, pas de gravité.
    Un connecteur par fichier, isolé derrière une interface commune, pour qu'une
    rupture n'en casse qu'un.
 
+## Avancement
+
+| | État |
+| --- | --- |
+| Module 1 — Ligne éditoriale (`brand-core`) | ✅ construit, testé |
+| **Le socle de la console** : base multi-marques, 13 tables, migrations | ✅ construit, testé |
+| **Registre des marques, sites, canaux** | ✅ `ag brand add`, `ag import-core` |
+| **Registre des outils branchables** (37 outils, 9 catégories) | ✅ `ag tools`, `ag connect` |
+| **Les écrans** : portefeuille, fiche marque, outils | ✅ `ag serve` |
+| **Modèle de prospection** : prospects, séquences, envois, RGPD dans le schéma | ✅ construit, testé |
+| Module 2 — Collecte (les connecteurs) | 🔜 le prochain chantier |
+| Modules 3 à 7 | ⬜ |
+
+Ce qui tourne déjà :
+
+```bash
+ag brand add https://egyptours.fr --channel instagram --channel google_ads --platform wordpress
+ag brand-core https://egyptours.fr          # la ligne éditoriale
+ag import-core brands/egyptours-fr/brand-core.json
+ag tools                                     # les 37 outils et leur mode d'accès
+ag connect ga4 GOOGLE_OAUTH_REFRESH          # une référence, jamais un secret
+ag serve                                     # la console sur http://127.0.0.1:8000
+```
+
 ## La prochaine chose à faire
 
-**Phase 1, tâche 1 : la base de données multi-marques et le registre des
-marques**, avec Egyptours et Oria comme premières entrées réelles.
+**Module 2 : le premier connecteur en lecture.** L'ordre vient d'ADR-013 — on
+commence par ce qui n'exige aucune revue d'application.
 
-Deux informations manquent pour commencer : **les adresses des deux sites**, et
-**les canaux déjà actifs** sur chacune (Instagram ? Google Ads ? fiche Google ?).
+Il manque deux informations : **les adresses de Egyptours et Oria**, et **les
+canaux déjà actifs** sur chacune (Instagram ? Google Ads ? fiche Google ?).

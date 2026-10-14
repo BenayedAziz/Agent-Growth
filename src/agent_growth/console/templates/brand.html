@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pill, delta, empty %}
+{% block title %}{{ brand.name }}{% endblock %}
+{% block content %}
+
+<p class="text-sm"><a href="/" class="text-slate-500 hover:text-teal-700 dark:hover:text-teal-400">← Portefeuille</a></p>
+
+<div class="mt-2 flex items-baseline justify-between gap-4 flex-wrap">
+  <h1 class="text-2xl font-semibold tracking-tight">
+    {{ brand.name }}
+    {% if brand.kind == 'interne' %}{{ pill("interne", "idle") }}{% else %}{{ pill("client", "ok") }}{% endif %}
+  </h1>
+  <a href="{{ brand.url }}" class="text-sm text-slate-500 hover:underline">{{ brand.url }}</a>
+</div>
+
+{% if core %}
+  {% set line = core.core.editorial_line %}
+  <section class="mt-5 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/40 p-4">
+    <h2 class="font-semibold">Ligne éditoriale</h2>
+    <p class="mt-2 text-sm">{{ line.promise }}</p>
+    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-500">Piliers</p>
+        <ul class="mt-1 text-sm">
+          {% for p in line.pillars %}
+            <li><span class="num">{{ p.share_of_voice_pct }}&nbsp;%</span> — {{ p.name }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <p class="text-xs uppercase tracking-wide text-slate-500">À bannir</p>
+        <p class="mt-1 text-sm">{{ line.vocabulary_avoid | join(', ') or '—' }}</p>
+      </div>
+    </div>
+    <p class="mt-3 text-xs text-slate-500">
+      Analyse du {{ core.generated_at[:10] }} · schéma v{{ core.schema_version }} ·
+      <code class="num">brands/{{ brand.slug }}/brand-core.md</code>
+    </p>
+  </section>
+{% else %}
+  <section class="mt-5">
+  {{ empty("Pas encore de ligne éditoriale",
+           "Lance « ag brand-core " ~ brand.url ~ " ». Tous les autres modules la lisent : sans elle, le contenu et les annonces n'ont pas de cap.") }}
+  </section>
+{% endif %}
+
+<section class="mt-8">
+  <h2 class="text-lg font-semibold">Canaux</h2>
+  <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200 dark:border-slate-800">
+        <th class="px-4 py-2">Canal</th><th class="px-4 py-2">Compte</th><th class="px-4 py-2">État</th>
+      </tr></thead>
+      <tbody>
+      {% for c in channels %}
+        {% set lbl, tone = state_labels.get(c.state, (c.state, 'idle')) %}
+        <tr class="border-b border-slate-100 dark:border-slate-800 last:border-0">
+          <td class="px-4 py-2">{{ channel_labels.get(c.kind, c.kind) }}</td>
+          <td class="px-4 py-2 text-slate-500">{{ c.handle or '—' }}</td>
+          <td class="px-4 py-2">{{ pill(lbl, tone) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="px-4 py-3 text-slate-500">Aucun canal déclaré.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-8">
+  <div class="flex items-baseline justify-between">
+    <h2 class="text-lg font-semibold">Résultats</h2>
+    <p class="text-sm text-slate-500">
+      {% if last_collected %}dernière collecte&nbsp;: {{ last_collected }}{% else %}jamais collecté{% endif %}
+    </p>
+  </div>
+  {% if totals %}
+    <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200 dark:border-slate-800">
+          <th class="px-4 py-2">Canal</th><th class="px-4 py-2">Métrique</th>
+          <th class="px-4 py-2 text-right">{{ days }} j</th>
+          <th class="px-4 py-2 text-right">{{ days }} j précédents</th>
+          <th class="px-4 py-2 text-right">Évolution</th>
+        </tr></thead>
+        <tbody>
+        {% for t in totals %}
+          <tr class="border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <td class="px-4 py-2">{{ channel_labels.get(t.channel, t.channel) }}</td>
+            <td class="px-4 py-2 text-slate-500">{{ t.metric }}</td>
+            <td class="px-4 py-2 text-right num">{{ t.current | round(0) | int }}</td>
+            <td class="px-4 py-2 text-right num text-slate-500">{{ t.previous | round(0) | int }}</td>
+            <td class="px-4 py-2 text-right">{{ delta(t.current, t.previous) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="mt-3">
+    {{ empty("Aucune mesure", "Les chiffres remonteront chaque nuit dès qu'un canal sera connecté. Voir « Outils ».") }}
+    </div>
+  {% endif %}
+</section>
+
+<section class="mt-8">
+  <h2 class="text-lg font-semibold">Prospection</h2>
+  {% if pipeline_total %}
+    <div class="mt-3 grid gap-2 grid-cols-3 sm:grid-cols-5 lg:grid-cols-9">
+      {% for label, n in pipeline %}
+        <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 text-center">
+          <p class="num text-lg">{{ n }}</p>
+          <p class="text-xs text-slate-500">{{ label }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="mt-3">
+    {{ empty("Aucun prospect",
+             "Chaque prospect portera son origine et sa base légale : c'est une contrainte du schéma, pas une option.") }}
+    </div>
+  {% endif %}
+</section>
+
+<section class="mt-8">
+  <h2 class="text-lg font-semibold">Sites</h2>
+  <ul class="mt-3 text-sm">
+    {% for s in sites %}
+      <li class="py-1">{{ s.url }} <span class="text-slate-500">— {{ s.platform }}{% if s.page_count %}, {{ s.page_count }} pages{% endif %}, écriture&nbsp;: {{ s.write_access }}</span></li>
+    {% else %}
+      <li class="text-slate-500">Aucun site enregistré.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% endblock %}

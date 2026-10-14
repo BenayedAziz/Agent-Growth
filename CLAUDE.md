@@ -9,6 +9,7 @@ marketing. Vulgariser n'est donc pas de la mise en forme : c'est la
 fonctionnalité.
 
 **Produit et feuille de route : [docs/PLATEFORME.md](docs/PLATEFORME.md).**
+Ambition et mécanisme de différenciation : [docs/VISION.md](docs/VISION.md).
 Le produit est une console multi-marques ; les canaux (SEO, GEO, social, ads)
 sont des modules (ADR-012). Catalogue des modules par canal :
 [docs/FEATURES.md](docs/FEATURES.md).
@@ -52,6 +53,9 @@ Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
 | `src/agent_growth/llm.py` | **Seul** point d'accès à Claude. Modèle, effort, refus : ici et nulle part ailleurs. |
 | `src/agent_growth/crawl.py` | Lecture des sites. Respecte `robots.txt`. En-têtes HTTP en ASCII strict. |
 | `src/agent_growth/render.py` | JSON → documents lisibles. Aucune logique métier. |
+| `src/agent_growth/schema.sql` | Les 13 tables de la console. Une colonne ajoutée après coup va aussi dans `_ADDED_COLUMNS` de `store.py`, sinon la base de production casse. |
+| `src/agent_growth/store.py` | Seul accès à la base. **Aucun secret n'y entre** : `secret_ref` est un nom de variable, jamais une valeur. |
+| `src/agent_growth/console/` | Les écrans. Rendu serveur, Jinja. Starlette 1.6 exige `TemplateResponse(request, nom, contexte)`. |
 | `src/agent_growth/tools/` | Un fichier par outil. Le prompt système y vit — c'est l'actif principal. |
 | `skills/<nom>/SKILL.md` | Quand lancer l'outil et quoi faire du résultat. Jamais de logique. |
 | `skills/vendor/` | Skills externes copiées et épinglées. À relire avant activation. |
