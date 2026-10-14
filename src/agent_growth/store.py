@@ -40,6 +40,28 @@ CHANNELS: dict[str, str] = {
 #: Canaux qui dépensent de l'argent : ils imposent un plafond et une validation.
 PAID_CHANNELS = frozenset({"google_ads", "meta_ads"})
 
+# Le vocabulaire des métriques est séparé en deux, et ce n'est pas cosmétique
+# (docs/PREMIERS-PRINCIPES.md § 5). Un client achète des clients de plus à un
+# coût connu : c'est le **résultat**. Les clics, visites et abonnés sont de
+# l'**activité** — utiles pour comprendre pourquoi, jamais pour dire si ça
+# marche. Un écran qui ouvre sur de l'activité répond à la mauvaise question.
+
+#: Ce qui compte comme un résultat acquis.
+ACQUISITION_METRICS = frozenset({"leads", "clients", "ventes", "rdv"})
+
+#: Le chiffre d'affaires attribué.
+REVENUE_METRICS = frozenset({"ca_eur"})
+
+#: Ce que ça a coûté.
+COST_METRICS = frozenset({"cout_eur"})
+
+#: Tout ce qui décide du haut de l'écran.
+OUTCOME_METRICS = ACQUISITION_METRICS | REVENUE_METRICS | COST_METRICS
+
+
+def is_outcome(metric: str) -> bool:
+    return metric in OUTCOME_METRICS
+
 #: Le `brand-core` raisonne en familles de canaux (« social », « ads »), parce
 #: qu'une stratégie se pense comme ça. La console a besoin de canaux concrets,
 #: parce qu'un connecteur se branche sur une plateforme précise. Cette table
@@ -233,6 +255,57 @@ def totals(
     ).fetchall()
 
 
+def outcome(conn: sqlite3.Connection, brand_id: int, *, days: int = 30) -> dict:
+    """Le résultat d'une marque : combien acquis, à quel coût, et l'évolution.
+
+    C'est la seule chose qu'un client ne peut pas obtenir gratuitement ailleurs,
+    donc c'est ce qui s'affiche en premier. Renvoie `measured = False` quand rien
+    n'a été mesuré — auquel cas la console le dit au lieu de remplir l'écran
+    avec de l'activité.
+    """
+    end = date.today()
+    start = end - timedelta(days=days)
+    prev_start = start - timedelta(days=days)
+
+    def window(metrics: frozenset[str], since: str, until: str | None) -> float:
+        placeholders = ",".join("?" * len(metrics))
+        sql = (
+            f"SELECT COALESCE(SUM(value), 0) AS s FROM measure "
+            f"WHERE brand_id = ? AND metric IN ({placeholders}) AND day >= ?"
+        )
+        args: list[object] = [brand_id, *sorted(metrics), since]
+        if until is not None:
+            sql += " AND day < ?"
+            args.append(until)
+        return float(conn.execute(sql, args).fetchone()["s"])
+
+    s_iso, p_iso = start.isoformat(), prev_start.isoformat()
+    acquired = window(ACQUISITION_METRICS, s_iso, None)
+    cost = window(COST_METRICS, s_iso, None)
+    revenue = window(REVENUE_METRICS, s_iso, None)
+    prev_acquired = window(ACQUISITION_METRICS, p_iso, s_iso)
+    prev_cost = window(COST_METRICS, p_iso, s_iso)
+
+    return {
+        "measured": bool(acquired or cost or revenue),
+        "acquired": acquired,
+        "previous_acquired": prev_acquired,
+        "cost": cost,
+        "previous_cost": prev_cost,
+        "revenue": revenue,
+        # Coût par acquisition. None plutôt que zéro : « on ne sait pas » et
+        # « c'est gratuit » ne doivent jamais s'afficher pareil.
+        "cpa": (cost / acquired) if acquired else None,
+        "previous_cpa": (prev_cost / prev_acquired) if prev_acquired else None,
+        "roas": (revenue / cost) if cost else None,
+    }
+
+
+def activity(conn: sqlite3.Connection, brand_id: int, *, days: int = 30) -> list[sqlite3.Row]:
+    """Les métriques de diagnostic, hors résultat."""
+    return [r for r in totals(conn, brand_id, days=days) if not is_outcome(r["metric"])]
+
+
 def last_collected(conn: sqlite3.Connection, brand_id: int) -> str | None:
     row = conn.execute(
         "SELECT MAX(day) AS d FROM measure WHERE brand_id = ?", (brand_id,)
@@ -266,7 +339,10 @@ def portfolio(conn: sqlite3.Connection, *, days: int = 30) -> list[dict]:
                 "to_review": pending,
                 "daily_spend_eur": live_spend,
                 "last_collected": last_collected(conn, brand["id"]),
-                "totals": totals(conn, brand["id"], days=days),
+                # Le résultat d'abord, l'activité ensuite — dans cet ordre
+                # jusque dans la structure de données.
+                "outcome": outcome(conn, brand["id"], days=days),
+                "activity": activity(conn, brand["id"], days=days),
             }
         )
     return out

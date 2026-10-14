@@ -17,6 +17,24 @@ Marché, concurrence, tarifs : [docs/ETUDE-MARCHE.md](docs/ETUDE-MARCHE.md).
 Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
 [docs/DECISIONS.md](docs/DECISIONS.md).
 
+## La méthode de raisonnement
+
+**On raisonne en premiers principes** : [docs/PREMIERS-PRINCIPES.md](docs/PREMIERS-PRINCIPES.md).
+Avant de construire quoi que ce soit, cinq questions — et la plus coupante est
+la première : *le client peut-il l'avoir gratuitement ailleurs ?* Si oui, c'est
+une commodité, pas le produit.
+
+Les deux conclusions qui commandent le code :
+
+- **La rareté est passée de la production au jugement.** Produire est gratuit,
+  donc produire ne vaut rien. Ce qui vaut : décider quoi produire, et prouver
+  que ça a marché. Un module de contenu doit donc avoir un **taux de rejet
+  élevé et assumé** — on produit beaucoup pour publier peu.
+- **La mesure n'est pas un module, c'est le produit.** Le client peut écrire un
+  post gratuitement ; il ne peut pas savoir si un euro dépensé en a rapporté
+  plus d'un, tous canaux confondus. D'où : le résultat en haut des écrans,
+  l'activité en dessous.
+
 ## Les règles qui ne se discutent pas
 
 1. **Un outil ne redécide jamais du positionnement ou du ton.** Il lit
@@ -41,9 +59,14 @@ Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
    de façon lisible par machine.** L'article 50 de l'AI Act est en vigueur
    depuis le 2 août 2026. Ça vit dans le pipeline de publication, pas dans les
    CGV (ADR-011).
-9. **On mène avec le GEO/AEO, pas avec le SEO.** Le CTR organique perd 58-61 %
-   sur les requêtes à réponse IA et l'effet accélère ; le GEO est la catégorie
-   la mieux payée du marché (ADR-010, docs/ETUDE-MARCHE.md).
+9. **On mène avec la preuve du retour, pas avec un canal.** Le GEO est mieux
+   payé que le SEO (ADR-010), mais les deux restent des moyens. L'argument est
+   « voilà ce qu'un euro a rapporté, tous canaux confondus » — la seule chose
+   que le client ne peut pas obtenir gratuitement (ADR-014).
+10. **Un écran montre le résultat avant l'activité.** Clients et coût par
+   acquisition en haut ; clics, visites et abonnés en dessous, comme
+   diagnostic. Et quand rien n'est mesuré, on le dit au lieu de remplir
+   l'écran avec de l'activité.
 
 ## Structure
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import pill, delta, empty %}
+{% from "_macros.html" import pill, delta, empty, eur, outcome_block %}
 {% block title %}Portefeuille{% endblock %}
 {% block content %}
 
@@ -8,7 +8,11 @@
   <p class="text-sm text-slate-500">{{ days }} derniers jours</p>
 </div>
 
-<section class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+<section class="mt-5">
+  {{ outcome_block(total, days, 'Résultat du portefeuille') }}
+</section>
+
+<section class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
   <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
     <p class="num text-2xl">{{ rows | length }}</p>
     <p class="mt-1 text-sm text-slate-500">marques pilotées</p>
@@ -76,15 +80,23 @@
       {% endfor %}
     </div>
 
-    {% if r.totals %}
+    {% if r.outcome.measured %}
+      <div class="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+        <span><span class="num font-medium">{{ r.outcome.acquired | round(0) | int }}</span> acquisitions {{ delta(r.outcome.acquired, r.outcome.previous_acquired) }}</span>
+        <span class="text-slate-500"><span class="num">{{ eur(r.outcome.cost) }}</span> dépensé</span>
+        <span class="text-slate-500"><span class="num font-medium text-slate-900 dark:text-slate-100">{{ eur(r.outcome.cpa) }}</span> par acquisition</span>
+      </div>
+    {% endif %}
+
+    {% if r.activity %}
     <div class="mt-3 overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="text-left text-xs uppercase tracking-wide text-slate-500">
-          <th class="py-1 pr-3">Canal</th><th class="py-1 pr-3">Métrique</th>
+          <th class="py-1 pr-3">Canal</th><th class="py-1 pr-3">Activité</th>
           <th class="py-1 pr-3 text-right">{{ days }} j</th><th class="py-1 text-right">Évolution</th>
         </tr></thead>
         <tbody>
-        {% for t in r.totals[:6] %}
+        {% for t in r.activity[:6] %}
           <tr class="border-t border-slate-100 dark:border-slate-800">
             <td class="py-1 pr-3">{{ channel_labels.get(t.channel, t.channel) }}</td>
             <td class="py-1 pr-3 text-slate-500">{{ t.metric }}</td>

@@ -417,3 +417,72 @@ casser qu'un connecteur.
 **Réserve.** Ces règles bougent et les sources sont majoritairement des guides
 tiers. À revérifier dans la documentation officielle au moment de brancher
 chaque plateforme.
+
+---
+
+## ADR-014 — La mesure est le produit ; on produit beaucoup pour publier peu
+
+*2026-10-14 · adopté · amende ADR-010 (« mener avec le GEO ») et le module 4*
+
+Issu du raisonnement en premiers principes, consigné dans
+[PREMIERS-PRINCIPES.md](PREMIERS-PRINCIPES.md), qui devient la méthode de
+décision du projet.
+
+**Le test qui tranche.** Pour chaque fonctionnalité : *le client peut-il
+l'obtenir gratuitement ailleurs ?*
+
+| Fonction | Gratuite ailleurs ? |
+| --- | --- |
+| Écrire un post, une annonce, un article | **Oui** — ChatGPT gratuit |
+| Générer un visuel | **Oui** |
+| Suivre ses chiffres canal par canal | **Oui** — chaque plateforme a son tableau de bord |
+| Savoir **quoi** dire, pour **sa** marque | Non |
+| Savoir si un euro dépensé en a rapporté plus d'un, **tous canaux confondus** | **Non. Personne ne le lui donne.** |
+
+**Décision 1 : la mesure n'est pas le module 6, c'est le produit.** Un système
+qui prouve le retour sans produire de contenu se vend ; un système qui produit
+du contenu sans prouver le retour ne se vend pas longtemps. Les modules contenu
+et publicité sont des commodités nécessaires, pas l'argument.
+
+Ça amende ADR-010 : le GEO est mieux payé que le SEO, mais les deux restent des
+moyens. L'argument de vente devient « voilà ce qu'un euro a rapporté, tous
+canaux confondus ».
+
+**Décision 2 : le résultat s'affiche avant l'activité.** La rareté est passée de
+la production au jugement : produire est gratuit, donc produire ne vaut rien.
+Un écran qui ouvre sur des abonnés, des clics et des visites répond à la
+mauvaise question — ces chiffres sont là parce que les plateformes les donnent
+facilement, pas parce qu'ils disent si ça marche.
+
+Mis en œuvre dans le code, pas seulement dans la doc : `store.py` sépare
+`ACQUISITION_METRICS`, `REVENUE_METRICS` et `COST_METRICS` du reste, `outcome()`
+renvoie acquisitions, coût et coût par acquisition avec la période précédente,
+`activity()` renvoie le diagnostic, et la console ouvre sur le premier. Quand
+rien n'est mesuré, elle le dit au lieu de remplir la place — `cpa` vaut `None`
+et non zéro, parce que « on ne sait pas » et « c'est gratuit » ne doivent jamais
+s'afficher pareil.
+
+**Décision 3 : le module contenu produit beaucoup pour publier peu.** Si
+produire est gratuit, tout le monde publiera chaque jour, et l'attention reste
+fixe : le contenu quotidien sera le bruit de fond, pas un avantage. Trente
+publications produites et les quatre meilleures publiées battent trente
+publiées. **Le taux de rejet devient un indicateur de qualité, pas un
+gâchis** — et il s'affiche comme tel.
+
+Ça amende la description du module 4 dans [PLATEFORME.md](PLATEFORME.md) : la
+capacité de production sert à jeter.
+
+**Décision 4 : la marque blanche est la seule voie de croissance saine.** Ce qui
+plafonne un cabinet n'est pas la livraison — l'automatisation la réduit — c'est
+le **transfert de confiance**, qui se construit à vitesse humaine, une relation
+à la fois. La marque blanche emprunte une confiance déjà construite : l'agence a
+celle de son client, on fournit la machine. Le libre-service ne marche que là où
+la confiance n'est pas requise, c'est-à-dire sur les petits paniers.
+
+**Pourquoi les gros ne suivront pas.** Pas parce qu'ils sont lents : parce que
+leur modèle de revenus le leur interdit. HubSpot vend des sièges et des crédits
+d'usage — un agent autonome, c'est moins de sièges. GoHighLevel vend un
+constructeur — un système qui n'a pas besoin d'être construit retire la raison
+de payer. Les agences vendent du temps. C'est une contrainte de trésorerie, pas
+d'ingénierie, et c'est la seule sorte de fossé qui tient face à quelqu'un de
+cent fois plus gros.

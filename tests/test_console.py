@@ -85,3 +85,41 @@ def test_tools_page_lists_the_catalog_with_access_gates(client):
 def test_tools_page_never_shows_a_secret_value(client):
     """Garde-fou : la page des outils n'affiche que des références."""
     assert "sk-" not in text(client.get("/outils"))
+
+
+def test_portfolio_leads_with_the_result_not_the_activity(client):
+    """Premiers principes : le résultat passe avant l'activité, à l'écran aussi."""
+    body = text(client.get("/"))
+    assert "Résultat du portefeuille" in body
+    # L'écran doit dire franchement qu'il n'y a pas de résultat mesuré,
+    # au lieu de remplir la place avec des visites.
+    assert "Aucun résultat mesuré" in body
+    assert body.index("Résultat du portefeuille") < body.index("marques pilotées")
+
+
+def test_brand_page_shows_result_before_activity(client):
+    body = text(client.get("/marque/salonlea-fr"))
+    assert body.index("Résultat") < body.index("Activité")
+    assert "pour dire si ça marche" in body  # l'avertissement sur l'activité
+
+
+def test_measured_outcome_is_displayed_with_its_cost_per_acquisition(tmp_path, doc):
+    import datetime
+    import json as _json
+
+    db = tmp_path / "c.db"
+    conn = store.connect(db)
+    core = tmp_path / "brand-core.json"
+    core.write_text(_json.dumps(doc.model_dump(), ensure_ascii=False), encoding="utf-8")
+    bid = store.import_brand_core(conn, core)
+    day = (datetime.date.today() - datetime.timedelta(days=2)).isoformat()
+    store.record(conn, [
+        (bid, "google_ads", "leads", day, 12),
+        (bid, "google_ads", "cout_eur", day, 600),
+    ])
+    conn.close()
+
+    body = html.unescape(TestClient(create_app(db)).get(f"/marque/salonlea-fr").text)
+    assert "12" in body
+    assert "50 €" in body.replace(" ", " ")   # 600 / 12
+    assert "par acquisition" in body

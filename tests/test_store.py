@@ -172,3 +172,57 @@ def test_an_older_database_gains_the_new_columns(tmp_path):
     assert brand["core_path"] == ""
     assert brand["name"] == "X"
     conn.close()
+
+
+def _day(n: int) -> str:
+    import datetime
+    return (datetime.date.today() - datetime.timedelta(days=n)).isoformat()
+
+
+def test_outcome_separates_result_from_activity(conn, brand_id):
+    """Un client achète des acquisitions à un coût connu, pas des abonnés."""
+    store.record(conn, [
+        (brand_id, "google_ads", "leads", _day(3), 8),
+        (brand_id, "google_ads", "cout_eur", _day(3), 400),
+        (brand_id, "instagram", "abonnes", _day(2), 1500),
+    ])
+    o = store.outcome(conn, brand_id)
+    assert o["measured"] is True
+    assert o["acquired"] == 8
+    assert o["cost"] == 400
+    assert o["cpa"] == 50
+
+    # Les abonnés ne polluent pas le résultat : ils sont du diagnostic.
+    assert [(r["channel"], r["metric"]) for r in store.activity(conn, brand_id)] == [
+        ("instagram", "abonnes")
+    ]
+
+
+def test_outcome_compares_with_the_previous_period(conn, brand_id):
+    store.record(conn, [
+        (brand_id, "google_ads", "leads", _day(3), 8),
+        (brand_id, "google_ads", "cout_eur", _day(3), 400),
+        (brand_id, "google_ads", "leads", _day(40), 4),
+        (brand_id, "google_ads", "cout_eur", _day(40), 320),
+    ])
+    o = store.outcome(conn, brand_id)
+    assert o["cpa"] == 50
+    assert o["previous_cpa"] == 80   # le coût d'acquisition a baissé
+
+
+def test_outcome_says_when_nothing_is_measured(conn, brand_id):
+    """« On ne sait pas » ne doit jamais s'afficher comme « c'est gratuit »."""
+    store.record(conn, [(brand_id, "instagram", "abonnes", _day(1), 900)])
+    o = store.outcome(conn, brand_id)
+    assert o["measured"] is False
+    assert o["cpa"] is None
+    assert o["roas"] is None
+
+
+def test_roas_is_reported_when_revenue_is_attributed(conn, brand_id):
+    store.record(conn, [
+        (brand_id, "google_ads", "cout_eur", _day(2), 500),
+        (brand_id, "google_ads", "ca_eur", _day(2), 2000),
+        (brand_id, "google_ads", "ventes", _day(2), 10),
+    ])
+    assert store.outcome(conn, brand_id)["roas"] == 4.0

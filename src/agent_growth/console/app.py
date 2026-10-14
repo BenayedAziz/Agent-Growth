@@ -74,11 +74,26 @@ def create_app(db_path: Path | str = store.DEFAULT_DB) -> FastAPI:
             unconnected = sum(
                 1 for r in rows for c in r["channels"] if c["state"] == "a_connecter"
             )
+            # Le résultat agrégé du portefeuille. C'est la première chose à
+            # l'écran, parce que c'est la seule question qui compte.
+            acquired = sum(r["outcome"]["acquired"] for r in rows)
+            cost = sum(r["outcome"]["cost"] for r in rows)
+            prev_acquired = sum(r["outcome"]["previous_acquired"] for r in rows)
+            prev_cost = sum(r["outcome"]["previous_cost"] for r in rows)
+            total = {
+                "measured": any(r["outcome"]["measured"] for r in rows),
+                "acquired": acquired,
+                "previous_acquired": prev_acquired,
+                "cost": cost,
+                "cpa": (cost / acquired) if acquired else None,
+                "previous_cpa": (prev_cost / prev_acquired) if prev_acquired else None,
+            }
             return TEMPLATES.TemplateResponse(
                 request,
                 "portfolio.html",
                 ctx(
                     rows=rows,
+                    total=total,
                     money=money,
                     days=days,
                     to_review=to_review,
@@ -108,7 +123,8 @@ def create_app(db_path: Path | str = store.DEFAULT_DB) -> FastAPI:
                     brand=brand,
                     sites=store.list_sites(conn, bid),
                     channels=store.list_channels(conn, bid),
-                    totals=store.totals(conn, bid, days=days),
+                    outcome=store.outcome(conn, bid, days=days),
+                    activity=store.activity(conn, bid, days=days),
                     last_collected=store.last_collected(conn, bid),
                     core=_load_core(brand),
                     pipeline=[(PIPELINE_LABELS[s], pipe.get(s, 0)) for s in PIPELINE_ORDER],

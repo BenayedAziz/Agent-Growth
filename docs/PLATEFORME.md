@@ -60,7 +60,7 @@ voir [ADR-012](DECISIONS.md#adr-012--le-produit-est-la-console-multi-marques-pas
 | **1. Marque** | La ligne éditoriale, les ICP, les angles, les opportunités chiffrées | ✅ construit (`brand-core`) |
 | **2. Collecte** | Remonte chaque nuit les chiffres de tous les canaux dans `Mesure` | OAuth par plateforme |
 | **3. Console** | Vue portefeuille (toutes les marques), vue marque, vue canal | module 2 |
-| **4. Contenu** | Calendrier dérivé des piliers, génération quotidienne, file de validation, publication | modules 1 et 2 |
+| **4. Contenu** | Calendrier dérivé des piliers, **surproduction puis sélection par pré-test**, file de validation, publication | modules 1 et 2 |
 | **5. Publicité** | Créations en variantes, lancement, pilotage sous plafond de dépense | modules 1 et 2 |
 | **6. Rapport** | Rapport automatique par marque, écart entre estimation annoncée et réel | modules 2 et 3 |
 | **7. Prospection** | Sourcing, enrichissement, séquences personnalisées dans la voix de la marque | modules 1 et 2 |
@@ -130,12 +130,15 @@ Estimations en **jours de travail effectif** — pas en jours de calendrier.
 tu reçois un rapport automatique.** C'est déjà l'essentiel de ce que tu
 demandes.
 
-### Phase 2 — Le contenu organique quotidien
+### Phase 2 — Le contenu organique
+
+Produire beaucoup pour publier peu (ADR-014) : le taux de rejet est un
+indicateur de qualité, pas un gâchis.
 
 | Tâche | Jours |
 | --- | --- |
 | Calendrier dérivé des piliers et de leur part de voix | 4 |
-| Génération quotidienne par canal + file de validation | 6 |
+| Génération quotidienne par canal + pré-test + file de validation | 6 |
 | Génération des visuels (API image et vidéo) | 4 |
 | Publication sur tes propres comptes | 4 |
 | Signalement et marquage IA Act | 2 |
