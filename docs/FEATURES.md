@@ -1,4 +1,9 @@
-# Fonctionnalités clés
+# Fonctionnalités clés — catalogue par canal
+
+> **La feuille de route est [PLATEFORME.md](PLATEFORME.md)**, pas ce document.
+> Le produit est une console multi-marques ; ce qui suit est le catalogue des
+> modules par canal, utile pour savoir quoi construire dans chaque module,
+> pas pour décider de l'ordre (ADR-012).
 
 Document de référence du périmètre. Il répond à trois questions : qu'est-ce
 qu'on construit, dans quel ordre, et pourquoi dans cet ordre.

@@ -8,7 +8,10 @@ comme colonne vertébrale**. La cible est un dirigeant de TPE/PME sans formation
 marketing. Vulgariser n'est donc pas de la mise en forme : c'est la
 fonctionnalité.
 
-Périmètre et ordre des lots : [docs/FEATURES.md](docs/FEATURES.md).
+**Produit et feuille de route : [docs/PLATEFORME.md](docs/PLATEFORME.md).**
+Le produit est une console multi-marques ; les canaux (SEO, GEO, social, ads)
+sont des modules (ADR-012). Catalogue des modules par canal :
+[docs/FEATURES.md](docs/FEATURES.md).
 Marché, concurrence, tarifs : [docs/ETUDE-MARCHE.md](docs/ETUDE-MARCHE.md).
 Choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et
 [docs/DECISIONS.md](docs/DECISIONS.md).

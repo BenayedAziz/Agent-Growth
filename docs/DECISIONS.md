@@ -349,3 +349,71 @@ est un avantage qui ne s'improvise pas.
 **Réserve.** Les sources sont des cabinets juridiques et des blogs
 spécialisés, pas le Journal officiel. À faire valider par un juriste avant tout
 engagement contractuel envers un client.
+
+---
+
+## ADR-012 — Le produit est la console multi-marques, pas un canal
+
+*2026-10-13 · adopté · amende ADR-003 sur le stockage*
+
+**Erreur de cadrage corrigée.** Les décisions précédentes ont progressivement
+fait du SEO/GEO le centre du produit, parce que c'est là que l'étude de marché
+avait le plus de données chiffrées. C'est une erreur : le SEO et le GEO sont
+deux canaux parmi huit.
+
+**Décision.** Le produit est **une console qui pilote le marketing digital de
+plusieurs marques à la fois** : ligne éditoriale par marque, contenu organique
+quotidien programmé, publicité générée et pilotée, résultats de tous les canaux
+au même endroit, reporting automatique, accès client en lecture. Les canaux sont
+des modules. Spécification et plan de construction :
+[PLATEFORME.md](PLATEFORME.md).
+
+**Ce qui ne change pas.** La ligne éditoriale reste la colonne vertébrale
+(ADR-001) : c'est elle qui rend cohérent ce qu'on publie sur huit canaux.
+`brand-core` reste le premier module, et il est construit.
+
+**Ce qui change : il faut une base de données.** Des fichiers suffisaient pour
+une analyse de marque. Ils ne suffisent pas pour des séries temporelles
+multi-marques, des jetons OAuth à rafraîchir et des tâches planifiées chaque
+nuit. ADR-003 est amendé sur ce point : les fichiers restent le format des
+livrables lisibles (`brand-core.md`, les rapports), la base porte l'état
+opérationnel.
+
+Une seule table porte toute l'intelligence de reporting :
+`Mesure(marque, canal, métrique, date, valeur)`. Tous les écrans et tous les
+rapports se calculent dessus — c'est ce qui évite un écran spécifique par
+plateforme.
+
+---
+
+## ADR-013 — Construire d'abord pour ses propres marques, parce que les portes sont ouvertes
+
+*2026-10-13 · adopté*
+
+**Constat qui décide de l'ordre.** Les plateformes laissent lire facilement,
+mais filtrent l'écriture **pour le compte d'autrui**.
+
+Pour ses propres comptes : OAuth suffit sur Analytics et Search Console ; les
+*developer tokens* Google Ads ont été supprimés le 9 septembre 2026 et l'accès
+« Basic » est désormais accordé automatiquement en quelques minutes après
+vérification de marque du projet Cloud ; un jeton d'utilisateur système suffit
+sur ses propres comptes Meta Ads, sans revue d'app ; la publication Instagram
+fonctionne en mode développement. Seule la fiche Google Business impose une
+revue manuelle, d'environ 14 jours.
+
+Pour les comptes de clients : Advanced Access, revue d'app par permission avec
+vidéo de démonstration, vérification d'entreprise avec documents légaux — de
+deux à six semaines par soumission.
+
+**Décision.** La phase 1 sert les marques du fondateur (Egyptours, Oria) et ne
+demande **aucune revue d'app**. Les dossiers de revue se déposent **en parallèle**
+de la phase 3, pas après, parce que le délai est du temps de calendrier qu'on ne
+compresse pas.
+
+**Corollaire d'architecture.** Un connecteur par fichier, derrière une interface
+commune. Les règles d'accès ont changé deux fois en 2026 : une rupture ne doit
+casser qu'un connecteur.
+
+**Réserve.** Ces règles bougent et les sources sont majoritairement des guides
+tiers. À revérifier dans la documentation officielle au moment de brancher
+chaque plateforme.
