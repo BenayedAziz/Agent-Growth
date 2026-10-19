@@ -227,3 +227,21 @@ def test_roas_is_reported_when_revenue_is_attributed(conn, brand_id):
         (brand_id, "google_ads", "ventes", _day(2), 10),
     ])
     assert store.outcome(conn, brand_id)["roas"] == 4.0
+
+
+def test_long_tasks_are_tracked_and_scoped_to_visible_brands(conn, brand_id):
+    other = store.add_brand(conn, slug="oria", name="Oria", url="https://oria.fr")
+    t1 = store.task_started(conn, kind="brand-core", label="Analyse", brand_id=brand_id)
+    store.task_started(conn, kind="brand-core", label="Analyse", brand_id=other)
+    store.task_finished(conn, t1, ok=True, detail="fait")
+    visible = store.recent_tasks(conn, brand_ids={brand_id})
+    assert [r["id"] for r in visible] == [t1]
+    assert visible[0]["state"] == "termine"
+
+
+def test_content_keeps_its_score_and_notes(conn, brand_id):
+    cid = store.add_content(conn, brand_id, channel="instagram", title="Accroche", body="Texte",
+                            pillar="Avant / après", score=82, notes="visuel : avant/après")
+    row = store.list_content(conn, brand_id)[0]
+    assert row["id"] == cid and row["score"] == 82 and row["state"] == "genere"
+    assert store.content_stats(conn, brand_id) == {"genere": 1}

@@ -176,3 +176,33 @@ class BrandCoreDocument(BaseModel):
     brand_url: str
     sources: list[Source]
     core: BrandCore
+
+
+
+# --------------------------------------------------------------------------- #
+# Publications sur les réseaux
+# --------------------------------------------------------------------------- #
+
+PostFormat = Literal["post", "carrousel", "reel", "story", "article"]
+
+
+class PostCandidate(BaseModel):
+    """Une proposition de publication. On en produit beaucoup, on en garde peu
+    (docs/PREMIERS-PRINCIPES.md § 3)."""
+
+    pillar: str = Field(description="Le pilier éditorial servi, tel qu'il est nommé dans la ligne éditoriale")
+    format: PostFormat
+    hook: str = Field(description="La première ligne : ce qui arrête le pouce. Une phrase.")
+    body: str = Field(description="Le texte complet, dans la voix de la marque")
+    hashtags: list[str] = Field(description="Cinq au plus, sans le #")
+    visual_brief: str = Field(description="Ce que montre le visuel, assez précis pour être produit")
+    trend_used: str = Field(description="La tendance ou l'actualité exploitée, ou chaîne vide si aucune")
+    score: int = Field(description="0-100 : probabilité d'arrêter la cible ET d'être fidèle à la ligne")
+    score_rationale: str = Field(description="Pourquoi cette note, en une phrase")
+    on_brand: bool = Field(description="Faux si la proposition viole le ton, le vocabulaire banni ou les interdits")
+    off_brand_reason: str = Field(description="Ce qui est hors ligne, ou chaîne vide")
+
+
+class SocialBatch(BaseModel):
+    trends_summary: str = Field(description="Les tendances retenues, en trois phrases au plus")
+    candidates: list[PostCandidate]

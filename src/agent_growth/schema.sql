@@ -102,6 +102,10 @@ CREATE TABLE IF NOT EXISTS content (
     ai_marked     INTEGER NOT NULL DEFAULT 0 CHECK (ai_marked IN (0, 1)),
     published_at  TEXT,
     external_url  TEXT    NOT NULL DEFAULT '',
+    -- Brief visuel, tendance exploitée, raison d'un rejet.
+    notes         TEXT    NOT NULL DEFAULT '',
+    -- Note donnée à la proposition. On en produit beaucoup, on en garde peu.
+    score         REAL,
     created_at    TEXT    NOT NULL
 );
 
@@ -327,3 +331,56 @@ CREATE TABLE IF NOT EXISTS job_run (
 );
 
 CREATE INDEX IF NOT EXISTS job_run_last ON job_run (job, started_at);
+
+-- --------------------------------------------------------------------------
+-- Comptes : le consultant pilote, le client suit
+-- --------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_user (
+    id            INTEGER PRIMARY KEY,
+    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    name          TEXT    NOT NULL DEFAULT '',
+    -- consultant : voit et pilote tout. client : voit ses marques, ne pilote rien.
+    role          TEXT    NOT NULL CHECK (role IN ('consultant', 'client')),
+    -- scrypt, sel compris. Jamais le mot de passe.
+    password_hash TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL,
+    last_login_at TEXT
+);
+
+-- Les marques qu'un client a le droit de voir. Un consultant n'en a pas besoin.
+CREATE TABLE IF NOT EXISTS user_brand (
+    user_id  INTEGER NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    brand_id INTEGER NOT NULL REFERENCES brand(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, brand_id)
+);
+
+-- La conversation avec l'agent, pour la reprendre où on l'a laissée.
+CREATE TABLE IF NOT EXISTS chat_message (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    brand_id   INTEGER REFERENCES brand(id) ON DELETE SET NULL,
+    role       TEXT    NOT NULL CHECK (role IN ('user', 'assistant')),
+    text       TEXT    NOT NULL,
+    -- Les actions faites pendant ce tour, pour les afficher sous la réponse.
+    actions    TEXT    NOT NULL DEFAULT '[]',
+    created_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS chat_by_user ON chat_message (user_id, created_at);
+
+-- --------------------------------------------------------------------------
+-- Travaux longs lancés depuis l'interface
+-- --------------------------------------------------------------------------
+-- Une analyse de marque ou une série de publications prend une à trois
+-- minutes : on ne fait pas attendre l'écran, on affiche l'avancement.
+CREATE TABLE IF NOT EXISTS task (
+    id          INTEGER PRIMARY KEY,
+    brand_id    INTEGER REFERENCES brand(id) ON DELETE CASCADE,
+    kind        TEXT    NOT NULL,
+    label       TEXT    NOT NULL,
+    state       TEXT    NOT NULL DEFAULT 'en_cours'
+                        CHECK (state IN ('en_cours', 'termine', 'echec')),
+    detail      TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL,
+    finished_at TEXT
+);

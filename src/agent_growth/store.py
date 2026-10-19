@@ -122,6 +122,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("brand", "core_path", "TEXT NOT NULL DEFAULT ''"),
     ("site", "secret_ref", "TEXT NOT NULL DEFAULT ''"),
     ("site", "config", "TEXT NOT NULL DEFAULT '{}'"),
+    ("content", "notes", "TEXT NOT NULL DEFAULT ''"),
+    ("content", "score", "REAL"),
 )
 
 
@@ -939,3 +941,69 @@ def recent_failures(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.R
     return conn.execute(
         "SELECT * FROM job_run WHERE ok = 0 ORDER BY started_at DESC LIMIT ?", (limit,)
     ).fetchall()
+
+
+
+# --------------------------------------------------------------------------- #
+# Travaux longs
+# --------------------------------------------------------------------------- #
+
+def task_started(conn: sqlite3.Connection, *, kind: str, label: str, brand_id: int | None) -> int:
+    cur = conn.execute(
+        "INSERT INTO task (brand_id, kind, label, created_at) VALUES (?, ?, ?, ?)",
+        (brand_id, kind, label, now()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def task_finished(conn: sqlite3.Connection, task_id: int, *, ok: bool, detail: str) -> None:
+    conn.execute(
+        "UPDATE task SET state = ?, detail = ?, finished_at = ? WHERE id = ?",
+        ("termine" if ok else "echec", detail[:2000], now(), task_id),
+    )
+    conn.commit()
+
+
+def recent_tasks(conn: sqlite3.Connection, *, brand_ids: set[int] | None = None, limit: int = 20) -> list[sqlite3.Row]:
+    rows = conn.execute(
+        """SELECT t.*, b.name AS brand_name, b.slug AS brand_slug FROM task t
+           LEFT JOIN brand b ON b.id = t.brand_id ORDER BY t.id DESC LIMIT ?""",
+        (limit * 3 if brand_ids is not None else limit,),
+    ).fetchall()
+    if brand_ids is not None:
+        rows = [r for r in rows if r["brand_id"] in brand_ids][:limit]
+    return rows
+
+
+# --------------------------------------------------------------------------- #
+# Contenus
+# --------------------------------------------------------------------------- #
+
+def add_content(conn: sqlite3.Connection, brand_id: int, *, channel: str, title: str, body: str,
+                pillar: str = "", scheduled_for: str | None = None, notes: str = "",
+                score: float | None = None, state: str = "genere") -> int:
+    cur = conn.execute(
+        """INSERT INTO content (brand_id, channel, pillar, scheduled_for, state, title, body,
+                                notes, score, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, channel, pillar, scheduled_for, state, title, body, notes, score, now()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_content(conn: sqlite3.Connection, brand_id: int, *, limit: int = 100) -> list[sqlite3.Row]:
+    return conn.execute(
+        """SELECT * FROM content WHERE brand_id = ?
+           ORDER BY CASE state WHEN 'a_valider' THEN 0 WHEN 'valide' THEN 1 WHEN 'publie' THEN 2
+                               WHEN 'genere' THEN 3 ELSE 4 END,
+                    COALESCE(scheduled_for, created_at) LIMIT ?""",
+        (brand_id, limit),
+    ).fetchall()
+
+
+def content_stats(conn: sqlite3.Connection, brand_id: int) -> dict[str, int]:
+    rows = conn.execute("SELECT state, COUNT(*) AS n FROM content WHERE brand_id = ? GROUP BY state",
+                        (brand_id,)).fetchall()
+    return {r["state"]: r["n"] for r in rows}
