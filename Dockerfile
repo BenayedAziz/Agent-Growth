@@ -8,6 +8,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # serait effacée à chaque déploiement.
     AG_DB=/data/console.db
 
+# Lighthouse — le moteur de PageSpeed Insights — mesure la vitesse quand
+# l'API de Google refuse (quota). Il lui faut Node et Chromium.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends chromium nodejs npm \
+ && npm install -g lighthouse@12.8.2 \
+ && rm -rf /var/lib/apt/lists/* /root/.npm
+ENV CHROME_PATH=/usr/bin/chromium
+
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit SEO & GEO — {{ r.domain }}</title>
+<style>
+/* Présentation neutre en attendant la charte graphique de l'outil :
+   toutes les couleurs et polices sont ici, et nulle part ailleurs. */
+:root {
+  --ink: #1d2433;
+  --muted: #5b6475;
+  --line: #e3e6ec;
+  --paper: #ffffff;
+  --soft: #f5f6f8;
+  --accent: #2f4a7a;
+  --good: #1f7a4d;
+  --mid: #b26a00;
+  --bad: #b3261e;
+  --critique: #b3261e;
+  --important: #b26a00;
+  --amelioration: #2f4a7a;
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--soft); color: var(--ink); font: 15px/1.55 var(--font); }
+main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+section { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 32px; margin-bottom: 24px; }
+h1, h2, h3 { line-height: 1.25; margin: 0 0 8px; }
+h1 { font-size: 30px; }
+h2 { font-size: 22px; }
+h3 { font-size: 16px; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.draft { background: #fff4e5; border: 2px solid var(--mid); border-radius: 12px; padding: 18px 24px; margin-bottom: 24px; }
+.draft strong { color: var(--mid); }
+.draft li { margin: 6px 0; }
+.cover { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+.gauge { width: 140px; height: 140px; }
+.gauge text { font: 700 34px var(--font); fill: var(--ink); }
+.gauge .small { font: 500 12px var(--font); fill: var(--muted); }
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+.pillar-card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.pillar-card .score { font-size: 28px; font-weight: 700; }
+.pillar-card p { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.good { color: var(--good); } .mid { color: var(--mid); } .bad { color: var(--bad); }
+.facts { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 16px; font-size: 14px; color: var(--muted); }
+.facts b { color: var(--ink); }
+.priorities li { margin: 8px 0; }
+.pillar-head { border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 20px; display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.pillar-head .score { font-size: 34px; font-weight: 700; white-space: nowrap; }
+.pillar-head .score small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.ymyl { background: var(--soft); border-left: 3px solid var(--accent); padding: 10px 14px; font-size: 14px; margin: 12px 0 0; }
+.finding { border: 1px solid var(--line); border-left: 4px solid var(--amelioration); border-radius: 8px; padding: 16px 18px; margin: 12px 0; break-inside: avoid; }
+.finding.critique { border-left-color: var(--critique); }
+.finding.important { border-left-color: var(--important); }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 99px; color: #fff; background: var(--amelioration); margin-right: 6px; vertical-align: middle; }
+.badge.critique { background: var(--critique); } .badge.important { background: var(--important); }
+.badge.geo { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.badge.manual { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.finding h3 { margin: 8px 0; }
+.finding dl { margin: 0; display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 14px; }
+.finding dt { color: var(--muted); font-weight: 600; }
+.finding dd { margin: 0; }
+.urls { font-size: 12px; color: var(--muted); margin: 10px 0 0; padding-left: 18px; word-break: break-all; }
+.passed { columns: 2; column-gap: 24px; padding-left: 0; list-style: none; font-size: 14px; }
+.passed li { break-inside: avoid; margin: 0 0 6px; padding-left: 22px; position: relative; }
+.passed li::before { content: "✓"; position: absolute; left: 0; color: var(--good); font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 12px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.url { word-break: break-all; max-width: 260px; }
+.legend { font-size: 12px; color: var(--muted); }
+.tools { display: grid; gap: 12px; }
+.tool { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.tool .by { font-size: 13px; color: var(--accent); font-weight: 600; }
+footer { text-align: center; font-size: 12px; color: var(--muted); }
+@media (max-width: 640px) {
+  section { padding: 20px; }
+  .cover, .pillars { grid-template-columns: 1fr; }
+  .passed { columns: 1; }
+  .finding dl { grid-template-columns: 1fr; }
+}
+@page { size: A4; margin: 14mm; }
+@media print {
+  body { background: #fff; font-size: 12px; }
+  main { padding: 0; max-width: none; }
+  section { border: none; padding: 0; margin-bottom: 18px; }
+  .pillar, .plan, .tools-section { break-before: page; }
+  a { color: var(--ink); text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<main>
+
+{% if r.draft %}
+<div class="draft">
+  <strong>Version de travail — à compléter avant envoi.</strong>
+  {{ r.pending|length }} vérification(s) de la recherche Google manuelle restent à faire :
+  <ul>
+  {% for m in r.pending %}
+    <li>{{ m.question }} —
+      {% for l in m.links %}<a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% macro tone(score) %}{{ 'good' if score >= 80 else 'mid' if score >= 50 else 'bad' }}{% endmacro %}
+
+<section>
+  <div class="cover">
+    <div>
+      <div class="eyebrow">Audit SEO & GEO</div>
+      <h1>{{ r.brand or r.domain }}</h1>
+      <p class="muted">{{ r.url }} · audit du {{ r.date }}</p>
+      <p>Ce rapport dit ce qui empêche le site d'être trouvé sur Google et recommandé par les assistants IA,
+        pourquoi ça compte, et quoi faire — dans l'ordre.</p>
+    </div>
+    <svg class="gauge" viewBox="0 0 140 140" role="img" aria-label="Note globale {{ r.score }} sur 100">
+      <circle cx="70" cy="70" r="60" fill="none" stroke="var(--line)" stroke-width="12"/>
+      <circle cx="70" cy="70" r="60" fill="none" stroke="var(--{{ tone(r.score) }})" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="{{ (r.score * 3.77)|round(1) }} 377" transform="rotate(-90 70 70)"/>
+      <text x="70" y="78" text-anchor="middle">{{ r.score }}</text>
+      <text x="70" y="98" text-anchor="middle" class="small">sur 100</text>
+    </svg>
+  </div>
+  <div class="pillars">
+    {% for p in r.pillars %}
+    <div class="pillar-card">
+      <div class="eyebrow">Pilier {{ loop.index }}</div>
+      <h3>{{ p.label }}</h3>
+      <div class="score {{ tone(p.score) }}">{{ p.score }}<span class="muted" style="font-size:14px;font-weight:500"> / 100</span></div>
+      <p>{{ p.subtitle }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="facts">
+    <span><b>{{ r.pages }}</b> pages analysées</span>
+    <span><b>{{ r.counts.critique }}</b> critique(s)</span>
+    <span><b>{{ r.counts.important }}</b> important(s)</span>
+    <span><b>{{ r.counts.amelioration }}</b> amélioration(s)</span>
+  </div>
+</section>
+
+<section>
+  <h2>En bref</h2>
+  {% if r.top %}
+  <p>Les trois chantiers à ouvrir en premier :</p>
+  <ol class="priorities">
+    {% for t in r.top %}<li><b>{{ t.title }}</b> <span class="muted">— {{ t.pillar }}{% if t.pages > 1 %}, {{ t.pages }} pages{% endif %}</span></li>{% endfor %}
+  </ol>
+  {% else %}
+  <p>Aucun défaut relevé par les vérifications automatiques.</p>
+  {% endif %}
+  <p class="legend">Gravité : <b>critique</b> — le site perd des visiteurs ou des clients maintenant ;
+    <b>important</b> — Google ou les IA comprennent mal le site ; <b>amélioration</b> — un gain réel, pas urgent.
+    La mention <b>IA</b> signale ce qui joue aussi sur la recommandation par ChatGPT, Perplexity ou Gemini.</p>
+</section>
+
+{% for p in r.pillars %}
+<section class="pillar">
+  <div class="pillar-head">
+    <div>
+      <div class="eyebrow">Pilier {{ loop.index }}</div>
+      <h2>{{ p.label }}</h2>
+      <p class="muted">{{ p.subtitle }}</p>
+      <p>{{ p.intro }}</p>
+      {% if p.key == 'eeat' and r.sector %}
+      <p class="ymyl">Le site touche à {{ r.sector }}. Google range ces sujets parmi les « YMYL »
+        (<i>Your Money or Your Life</i>) et y applique ses exigences de crédibilité les plus strictes.</p>
+      {% endif %}
+    </div>
+    <div class="score {{ tone(p.score) }}">{{ p.score }}<small> / 100</small></div>
+  </div>
+
+  {% if p.passed %}
+  <h3>Ce qui est déjà en place</h3>
+  <ul class="passed">{% for label in p.passed %}<li>{{ label }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if p.findings %}
+  <h3 style="margin-top:20px">À corriger</h3>
+  {% for f in p.findings %}
+  <div class="finding {{ f.severity }}">
+    <span class="badge {{ f.severity }}">{{ f.severity_label }}</span>{% if f.geo %}<span class="badge geo">IA</span>{% endif %}
+    <h3>{{ f.title }}</h3>
+    <dl>
+      <dt>Pourquoi</dt><dd>{{ f.why }}</dd>
+      <dt>À faire</dt><dd>{{ f.fix }}</dd>
+    </dl>
+    {% if f.urls %}
+    <ul class="urls">
+      {% for u in f.urls[:8] %}<li>{{ u }}</li>{% endfor %}
+      {% if f.urls|length > 8 %}<li>… et {{ f.urls|length - 8 }} autre(s)</li>{% endif %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if p.speed %}
+  <h3 style="margin-top:20px">Vitesse de chargement</h3>
+  <table>
+    <tr><th>Page</th><th>Appareil</th><th>Note</th><th>Contenu affiché</th><th>Stabilité</th><th>Blocage</th><th>Visiteurs réels</th></tr>
+    {% for s in p.speed %}
+    <tr>
+      <td class="url">{{ s.url }}</td>
+      <td>{{ 'Mobile' if s.strategy == 'mobile' else 'Ordinateur' }}</td>
+      {% if s.error %}
+      <td colspan="5" class="muted">Mesure à relancer : {{ s.error }}</td>
+      {% else %}
+      <td class="{{ tone(s.score or 0) }}"><b>{{ s.score }}</b></td>
+      <td>{{ '%.1f'|format(s.lcp_ms / 1000) if s.lcp_ms is not none else '—' }} s</td>
+      <td>{{ '%.2f'|format(s.cls) if s.cls is not none else '—' }}</td>
+      <td>{{ s.tbt_ms|round|int if s.tbt_ms is not none else '—' }} ms</td>
+      <td>{% if s.field_data %}{{ 'Validés' if s.field_data.category == 'FAST' else 'Non validés' }}{% if s.field_scope == 'site' %} (site entier){% endif %}{% else %}—{% endif %}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="legend"><b>Note</b> : note PageSpeed sur 100 (90 et plus = rapide). <b>Contenu affiché</b> : temps avant
+    que l'essentiel de la page apparaisse (bon sous 2,5 s). <b>Stabilité</b> : la page bouge-t-elle pendant le chargement
+    (bon sous 0,1). <b>Blocage</b> : temps pendant lequel la page ne répond pas aux gestes (bon sous 200 ms).
+    <b>Visiteurs réels</b> : verdict de Google sur les Core Web Vitals mesurés chez les vrais visiteurs ;
+    « — » quand Google n'a pas assez de visites pour en publier.</p>
+  {% set opps = p.speed|selectattr('opportunities')|list %}
+  {% if opps %}
+  <p><b>Pistes d'accélération chiffrées par Google</b> (accueil, mobile) :</p>
+  <ul>{% for o in opps[0].opportunities %}<li>{{ o.title }} — environ {{ '%.1f'|format(o.savings_ms / 1000) }} s gagnées</li>{% endfor %}</ul>
+  {% endif %}
+  {% endif %}
+
+  {% if p.manual %}
+  <h3 style="margin-top:20px">Ce que montre Google</h3>
+  {% for m in p.manual %}
+  <div class="finding {{ 'critique' if m.status == 'probleme' else 'important' if m.status == 'a-ameliorer' else '' }}">
+    <span class="badge manual">Recherche manuelle</span><span class="badge {{ 'critique' if m.status == 'probleme' else 'important' if m.status == 'a-ameliorer' else '' }}" {% if m.status == 'ok' %}style="background:var(--good)"{% endif %}>{{ m.status_label }}</span>
+    <h3>{{ m.question }}</h3>
+    <p>{{ m.constat }}</p>
+  </div>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+
+<section class="plan">
+  <h2>Plan d'action</h2>
+  <p class="muted">Dans l'ordre. Ce qui est critique se règle souvent en quelques heures, et c'est là que se perdent des clients aujourd'hui.</p>
+  {% if r.plan %}
+  <table>
+    <tr><th>Quand</th><th>Action</th><th>Pilier</th><th>Pages</th></tr>
+    {% for a in r.plan %}<tr><td>{{ a.horizon }}</td><td>{{ a.title }}</td><td>{{ a.pillar }}</td><td>{{ a.pages }}</td></tr>{% endfor %}
+  </table>
+  {% else %}<p>Rien d'urgent : le travail porte sur le contenu et la visibilité.</p>{% endif %}
+</section>
+
+<section class="tools-section">
+  <h2>Outils utilisés</h2>
+  <div class="tools">
+    {% for t in r.tools %}
+    <div class="tool"><h3>{{ t.name }}</h3><div class="by">{{ t.by }}</div><p class="muted" style="margin:6px 0 0">{{ t.detail }}</p></div>
+    {% endfor %}
+  </div>
+  <p class="legend" style="margin-top:16px">Méthode : chaque constat automatique est une règle vérifiable appliquée à ce qui a été
+    réellement lu sur le site, sans intelligence artificielle. Relancé sur un site inchangé, l'audit donne le même résultat.
+    La note est calculée sur ces constats ; la recherche manuelle l'éclaire sans la modifier.</p>
+</section>
+
+<footer>Audit du {{ r.date }} · {{ r.url }}</footer>
+</main>
+</body>
+</html>

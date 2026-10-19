@@ -248,3 +248,16 @@ def to_voice(doc: BrandCoreDocument) -> str:
     add("")
 
     return "\n".join(out)
+
+
+def audit_html(report: dict) -> str:
+    """Rapport d'audit client, une page HTML autonome et imprimable.
+
+    `report` sort de `audit.report()` : toute la mise en ordre est faite là-bas,
+    le gabarit ne fait que poser le texte.
+    """
+    from jinja2 import Environment, PackageLoader, select_autoescape
+
+    env = Environment(loader=PackageLoader("agent_growth", "templates"),
+                      autoescape=select_autoescape(["html"]))
+    return env.get_template("audit_report.html").render(r=report)

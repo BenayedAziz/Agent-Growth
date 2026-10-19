@@ -399,6 +399,9 @@ CREATE TABLE IF NOT EXISTS audit (
     critique   INTEGER NOT NULL DEFAULT 0,
     important  INTEGER NOT NULL DEFAULT 0,
     amelioration INTEGER NOT NULL DEFAULT 0,
+    -- Tout l'audit (constats, vitesse, vérifications passées) : de quoi
+    -- refaire le rapport client sans relire le site.
+    details    TEXT    NOT NULL DEFAULT '{}',
     created_at TEXT    NOT NULL
 );
 
@@ -413,5 +416,6 @@ CREATE TABLE IF NOT EXISTS audit_finding (
     title     TEXT    NOT NULL,
     why       TEXT    NOT NULL,
     fix       TEXT    NOT NULL,
-    urls      TEXT    NOT NULL DEFAULT '[]'
+    urls      TEXT    NOT NULL DEFAULT '[]',
+    pillar    TEXT    NOT NULL DEFAULT ''   -- technique, on-page, eeat
 );

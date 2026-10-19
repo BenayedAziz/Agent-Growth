@@ -34,4 +34,4 @@ pythonpath = ["src"]
 # ne partent pas dans le paquet et l'application déployée plante au démarrage
 # alors que tout fonctionne en local.
 [tool.setuptools.package-data]
-agent_growth = ["schema.sql", "console/templates/*.html"]
+agent_growth = ["schema.sql", "console/templates/*.html", "templates/*.html"]

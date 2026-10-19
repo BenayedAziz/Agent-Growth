@@ -124,6 +124,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("site", "config", "TEXT NOT NULL DEFAULT '{}'"),
     ("content", "notes", "TEXT NOT NULL DEFAULT ''"),
     ("content", "score", "REAL"),
+    ("audit", "details", "TEXT NOT NULL DEFAULT '{}'"),
+    ("audit_finding", "pillar", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -1018,17 +1020,18 @@ def save_audit(conn: sqlite3.Connection, result, *, brand_id: int | None = None)
     """Enregistre un audit et ses constats. `result` est un `audit.AuditResult`."""
     counts = result.counts
     cur = conn.execute(
-        """INSERT INTO audit (brand_id, url, score, pages, critique, important, amelioration, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (brand_id, result.url, result.score, len(result.pages), counts["critique"],
-         counts["important"], counts["amelioration"], now()),
+        """INSERT INTO audit (brand_id, url, score, pages, critique, important, amelioration,
+                              details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, result.url, result.score, result.pages_crawled or len(result.pages), counts["critique"],
+         counts["important"], counts["amelioration"], json.dumps(result.to_dict(), ensure_ascii=False), now()),
     )
     audit_id = int(cur.lastrowid)
     conn.executemany(
-        """INSERT INTO audit_finding (audit_id, code, severity, category, title, why, fix, urls)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO audit_finding (audit_id, code, severity, category, title, why, fix, urls, pillar)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [(audit_id, f.code, f.severity, f.category, f.title, f.why, f.fix,
-          json.dumps(f.urls, ensure_ascii=False)) for f in result.findings],
+          json.dumps(f.urls, ensure_ascii=False), f.pillar) for f in result.findings],
     )
     log(conn, brand_id=brand_id, actor="agent", action="audit SEO/GEO",
         rationale=f"{result.url} : {result.score}/100, {counts['critique']} critique(s)")
@@ -1046,6 +1049,12 @@ def audit_history(conn: sqlite3.Connection, *, url: str | None = None,
         sql += " AND brand_id = ?"
         args.append(brand_id)
     return conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
+
+
+def audit_details(conn: sqlite3.Connection, audit_id: int) -> dict | None:
+    """L'audit complet tel qu'enregistré (`AuditResult.to_dict()`)."""
+    row = conn.execute("SELECT details FROM audit WHERE id = ?", (audit_id,)).fetchone()
+    return json.loads(row["details"]) if row else None
 
 
 def audit_findings(conn: sqlite3.Connection, audit_id: int) -> list[dict]:

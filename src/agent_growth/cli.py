@@ -15,6 +15,7 @@ La console :
 Les outils d'analyse :
 
     ag audit <url>          audit SEO / GEO complet du site (gratuit, sans IA)
+    ag audit-report <dossier>  refaire le rapport après la recherche Google manuelle
     ag brand-core <url>     construire la ligne éditoriale de la marque
     ag inspect <url>        voir ce que l'agent lit du site (gratuit, sans IA)
     ag render <json>        régénérer les documents depuis un brand-core.json
@@ -29,6 +30,7 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
+from urllib.parse import urlparse
 
 from . import __version__, store
 from .crawl import crawl_site
@@ -74,11 +76,13 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
 def cmd_audit(args: argparse.Namespace) -> int:
     """Audit SEO / GEO. Règles vérifiables, aucun appel au modèle : gratuit et
-    reproductible."""
+    reproductible. Écrit le rapport client dans `--out`."""
     from . import audit
 
-    print(f"Audit de {args.url} (jusqu'à {args.max_pages} pages)…", file=sys.stderr)
-    result = audit.run(args.url, max_pages=args.max_pages)
+    source = " + export Screaming Frog" if args.screaming_frog else ""
+    print(f"Audit de {args.url} (jusqu'à {args.max_pages} pages{source})…", file=sys.stderr)
+    result = audit.run(args.url, max_pages=args.max_pages, speed=not args.no_speed,
+                       screaming_frog=args.screaming_frog)
     conn = store.connect(args.db)
     brand_id = None
     if args.brand:
@@ -89,25 +93,62 @@ def cmd_audit(args: argparse.Namespace) -> int:
         brand_id = int(brand["id"])
     store.save_audit(conn, result, brand_id=brand_id)
 
+    data = {**result.to_dict(), "brand": args.name or ""}
     if args.json:
-        print(json.dumps({"url": result.url, "score": result.score, "pages": len(result.pages),
-                          "counts": result.counts, "findings": [f.to_dict() for f in result.findings]},
-                         ensure_ascii=False, indent=2))
+        print(json.dumps(data, ensure_ascii=False, indent=2))
         return 0
+
+    host = urlparse(result.url).netloc.removeprefix("www.")
+    out = Path(args.out) if args.out else Path("brands") / host / "audit"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "audit.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    manual_path = out / "recherche-manuelle.json"
+    if not manual_path.exists():
+        manual_path.write_text(json.dumps(audit.manual_checklist(result.url, brand=args.name or ""),
+                                          ensure_ascii=False, indent=2), encoding="utf-8")
+    report = _write_report(out)
+
     c = result.counts
-    print(f"\n{result.url} — note {result.score}/100 — {len(result.pages)} pages lues")
-    print(f"{c['critique']} critique(s) · {c['important']} important(s) · {c['amelioration']} amélioration(s)\n")
-    for f in result.findings:
-        print(f"[{f.severity}] {f.title} ({len(f.urls)} page(s))")
-        print(f"   pourquoi : {f.why}")
-        print(f"   à faire  : {f.fix}")
-        for u in f.urls[:5]:
-            print(f"     · {u}")
-        if len(f.urls) > 5:
-            print(f"     · … et {len(f.urls) - 5} autre(s)")
-        print()
+    print(f"\n{result.url} — note {result.score}/100 — {data['pages']} pages analysées")
+    print(f"{c['critique']} critique(s) · {c['important']} important(s) · {c['amelioration']} amélioration(s)")
+    for pillar in report["pillars"]:
+        print(f"  {pillar['label']:<10} {pillar['score']:>3}/100 · {len(pillar['findings'])} constat(s) · "
+              f"{len(pillar['passed'])} point(s) acquis")
+    for s in result.speed:
+        verdict = f"note {s.score}/100 ({s.source})" if not s.error else f"⚠ {s.error}"
+        print(f"  vitesse {s.strategy:<7} {s.url} : {verdict}")
+    print(f"\nRapport : {out / 'rapport.html'}")
+    if report["draft"]:
+        print(f"Version de travail : {len(report['pending'])} vérification(s) Google à faire à la main.\n"
+              f"  1. Remplir « status » et « constat » dans {manual_path}\n"
+              f"  2. ag audit-report {out}")
     return 0
 
+
+def _write_report(folder: Path) -> dict:
+    from . import audit, render
+
+    data = json.loads((folder / "audit.json").read_text(encoding="utf-8"))
+    manual_path = folder / "recherche-manuelle.json"
+    manual = json.loads(manual_path.read_text(encoding="utf-8")) if manual_path.exists() else None
+    report = audit.report(data, manual, brand=data.get("brand", ""))
+    (folder / "rapport.html").write_text(render.audit_html(report), encoding="utf-8")
+    return report
+
+
+def cmd_audit_report(args: argparse.Namespace) -> int:
+    """Refait le rapport d'un audit déjà lancé, après la recherche manuelle."""
+    folder = Path(args.folder)
+    if not (folder / "audit.json").exists():
+        print(f"✗ Pas d'audit dans {folder} (audit.json absent). Lancer d'abord : ag audit URL", file=sys.stderr)
+        return 1
+    report = _write_report(folder)
+    print(f"Rapport : {folder / 'rapport.html'}")
+    if report["draft"]:
+        print(f"Encore {len(report['pending'])} vérification(s) manuelle(s) à remplir : version de travail.")
+    else:
+        print("Prêt à envoyer.")
+    return 0
 
 def cmd_brand_core(args: argparse.Namespace) -> int:
     notes = args.notes or ""
@@ -362,7 +403,16 @@ def build_parser() -> argparse.ArgumentParser:
     aud.add_argument("--max-pages", type=int, default=40)
     aud.add_argument("--brand", help="rattacher l'audit à une marque (suivi dans le temps)")
     aud.add_argument("--json", action="store_true", help="sortie JSON")
+    aud.add_argument("--name", help="nom de la marque, affiché sur le rapport")
+    aud.add_argument("--out", help="dossier du rapport (défaut : brands/<domaine>/audit)")
+    aud.add_argument("--screaming-frog", metavar="CSV",
+                     help="export « Internal: All » de Screaming Frog, pour un crawl complet")
+    aud.add_argument("--no-speed", action="store_true", help="ne pas mesurer la vitesse")
     aud.set_defaults(func=cmd_audit)
+
+    rep = sub.add_parser("audit-report", help="refaire le rapport client après la recherche manuelle")
+    rep.add_argument("folder", help="dossier de l'audit (celui qui contient audit.json)")
+    rep.set_defaults(func=cmd_audit_report)
 
     inspect = sub.add_parser("inspect", help="voir ce que l'agent lit du site, sans appeler l'IA")
     inspect.add_argument("url")

@@ -39,6 +39,15 @@ SKIP_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Numéros français, marocains, tunisiens… : « +33 1 23 45 67 89 », « 01 23 45 67 89 ».
+PHONE = re.compile(
+    r"(?:\+\d{2,3}[\s.]?(?:\(0\))?\s?\d|\b0[1-9])(?:[\s.-]?\d{2}){4}\b"
+    r"|\+216[\s.]?\d{2}[\s.]?\d{3}[\s.]?\d{3}\b"
+)
+# Mention imposée à toute publicité pour un crédit à la consommation
+# (Code de la consommation, art. L312-5).
+CREDIT_WARNING = re.compile(r"cr[ée]dit vous engage et doit [êe]tre rembours", re.I)
+
 DROP_TAGS = ("head", "script", "style", "noscript", "nav", "footer", "header", "svg", "iframe", "form")
 
 
@@ -64,6 +73,15 @@ class SeoSignals:
     images_missing_alt: int = 0
     noindex: bool = False
     has_viewport: bool = False
+    # E-E-A-T : qui parle, comment le joindre, qui se porte garant.
+    jsonld_keys: list[str] = field(default_factory=list)
+    link_labels: list[str] = field(default_factory=list)
+    has_tel: bool = False
+    has_email: bool = False
+    has_phone_text: bool = False
+    has_author_meta: bool = False
+    has_date_meta: bool = False
+    credit_warning: bool = False
 
 
 @dataclass
@@ -121,13 +139,34 @@ def parse_html(url: str, html: str) -> tuple[SeoSignals, str, list[str]]:
 
     jsonld_blocks = soup.find_all("script", attrs={"type": re.compile(r"ld\+json", re.I)})
     has_structured_data = bool(jsonld_blocks)
-    jsonld_types = _jsonld_types(jsonld_blocks)
+    jsonld_types, jsonld_keys = _jsonld_walk(jsonld_blocks)
 
     images = soup.find_all("img")
     images_missing_alt = sum(1 for img in images if not (img.get("alt") or "").strip())
     robots_meta = soup.find("meta", attrs={"name": re.compile("^robots$", re.I)})
     noindex = bool(robots_meta and "noindex" in str(robots_meta.get("content", "")).lower())
     has_viewport = bool(soup.find("meta", attrs={"name": re.compile("^viewport$", re.I)}))
+    hrefs = [str(a["href"]).strip().lower() for a in soup.find_all("a", href=True)]
+    has_tel = any(h.startswith("tel:") for h in hrefs)
+    has_email = any(h.startswith("mailto:") for h in hrefs)
+    has_author_meta = bool(
+        soup.find("meta", attrs={"name": re.compile("^author$", re.I)})
+        or soup.find(attrs={"rel": re.compile("author", re.I)})
+    )
+    has_date_meta = bool(
+        soup.find("meta", attrs={"property": re.compile(r"^article:(published|modified)_time$", re.I)})
+        or soup.find("time", attrs={"datetime": True})
+    )
+    link_labels: list[str] = []
+    for anchor in soup.find_all("a", href=True):
+        label = _clean(anchor.get_text()).lower()
+        if label and len(label) < 80 and label not in link_labels:
+            link_labels.append(label)
+    # Coordonnées et mentions légales vivent dans le pied de page : on les
+    # cherche dans la page entière, avant d'en retirer l'habillage.
+    full_text = _clean(soup.get_text(separator=" "))
+    has_phone_text = bool(PHONE.search(full_text))
+    credit_warning = bool(CREDIT_WARNING.search(full_text))
 
     h1 = [_clean(h.get_text()) for h in soup.find_all("h1")][:10]
     h2 = [_clean(h.get_text()) for h in soup.find_all("h2")][:25]
@@ -163,15 +202,30 @@ def parse_html(url: str, html: str) -> tuple[SeoSignals, str, list[str]]:
         images_missing_alt=images_missing_alt,
         noindex=noindex,
         has_viewport=has_viewport,
+        jsonld_keys=jsonld_keys,
+        link_labels=link_labels[:300],
+        has_tel=has_tel,
+        has_email=has_email,
+        has_phone_text=has_phone_text,
+        has_author_meta=has_author_meta,
+        has_date_meta=has_date_meta,
+        credit_warning=credit_warning,
     )
     return signals, text, links
 
 
 def _jsonld_types(blocks: list) -> list[str]:
     """Les types Schema.org déclarés (Organization, FAQPage…), dédoublonnés."""
+    return _jsonld_walk(blocks)[0]
+
+
+def _jsonld_walk(blocks: list) -> tuple[list[str], list[str]]:
+    """Les types Schema.org déclarés et les propriétés renseignées
+    (author, sameAs, reviewedBy…), dédoublonnés."""
     import json
 
     found: list[str] = []
+    keys: list[str] = []
 
     def walk(node: object) -> None:
         if isinstance(node, dict):
@@ -179,7 +233,9 @@ def _jsonld_types(blocks: list) -> list[str]:
             for k in (kind if isinstance(kind, list) else [kind]):
                 if isinstance(k, str) and k not in found:
                     found.append(k)
-            for value in node.values():
+            for key, value in node.items():
+                if not key.startswith("@") and value not in (None, "", [], {}) and key not in keys:
+                    keys.append(key)
                 walk(value)
         elif isinstance(node, list):
             for item in node:
@@ -191,7 +247,7 @@ def _jsonld_types(blocks: list) -> list[str]:
         except (ValueError, TypeError):
             if "JSON-LD invalide" not in found:
                 found.append("JSON-LD invalide")
-    return found
+    return found, keys
 
 
 def _robots(client: httpx.Client, base: str) -> RobotFileParser:
