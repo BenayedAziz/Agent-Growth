@@ -14,6 +14,7 @@ La console :
 
 Les outils d'analyse :
 
+    ag audit <url>          audit SEO / GEO complet du site (gratuit, sans IA)
     ag brand-core <url>     construire la ligne éditoriale de la marque
     ag inspect <url>        voir ce que l'agent lit du site (gratuit, sans IA)
     ag render <json>        régénérer les documents depuis un brand-core.json
@@ -68,6 +69,43 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         print(f"  {seo.word_count} mots · {seo.internal_link_count} liens internes · "
               f"lang={seo.lang or '?'} · JSON-LD={'oui' if seo.has_structured_data else 'non'}")
     print(f"\n{len(pages)} page(s) lue(s).")
+    return 0
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Audit SEO / GEO. Règles vérifiables, aucun appel au modèle : gratuit et
+    reproductible."""
+    from . import audit
+
+    print(f"Audit de {args.url} (jusqu'à {args.max_pages} pages)…", file=sys.stderr)
+    result = audit.run(args.url, max_pages=args.max_pages)
+    conn = store.connect(args.db)
+    brand_id = None
+    if args.brand:
+        brand = store.get_brand(conn, args.brand)
+        if brand is None:
+            print(f"✗ Marque inconnue : {args.brand}", file=sys.stderr)
+            return 1
+        brand_id = int(brand["id"])
+    store.save_audit(conn, result, brand_id=brand_id)
+
+    if args.json:
+        print(json.dumps({"url": result.url, "score": result.score, "pages": len(result.pages),
+                          "counts": result.counts, "findings": [f.to_dict() for f in result.findings]},
+                         ensure_ascii=False, indent=2))
+        return 0
+    c = result.counts
+    print(f"\n{result.url} — note {result.score}/100 — {len(result.pages)} pages lues")
+    print(f"{c['critique']} critique(s) · {c['important']} important(s) · {c['amelioration']} amélioration(s)\n")
+    for f in result.findings:
+        print(f"[{f.severity}] {f.title} ({len(f.urls)} page(s))")
+        print(f"   pourquoi : {f.why}")
+        print(f"   à faire  : {f.fix}")
+        for u in f.urls[:5]:
+            print(f"     · {u}")
+        if len(f.urls) > 5:
+            print(f"     · … et {len(f.urls) - 5} autre(s)")
+        print()
     return 0
 
 
@@ -318,6 +356,13 @@ def build_parser() -> argparse.ArgumentParser:
     core.add_argument("--dry-run", action="store_true",
                       help="afficher le prompt sans appeler le modèle (gratuit)")
     core.set_defaults(func=cmd_brand_core)
+
+    aud = sub.add_parser("audit", help="audit SEO / GEO complet du site (gratuit, sans IA)")
+    aud.add_argument("url")
+    aud.add_argument("--max-pages", type=int, default=40)
+    aud.add_argument("--brand", help="rattacher l'audit à une marque (suivi dans le temps)")
+    aud.add_argument("--json", action="store_true", help="sortie JSON")
+    aud.set_defaults(func=cmd_audit)
 
     inspect = sub.add_parser("inspect", help="voir ce que l'agent lit du site, sans appeler l'IA")
     inspect.add_argument("url")

@@ -58,6 +58,12 @@ class SeoSignals:
     has_structured_data: bool
     word_count: int
     internal_link_count: int
+    # Pour l'audit. Valeurs par défaut : les anciens appels restent valides.
+    jsonld_types: list[str] = field(default_factory=list)
+    images_total: int = 0
+    images_missing_alt: int = 0
+    noindex: bool = False
+    has_viewport: bool = False
 
 
 @dataclass
@@ -113,7 +119,15 @@ def parse_html(url: str, html: str) -> tuple[SeoSignals, str, list[str]]:
     html_tag = soup.find("html")
     lang = str(html_tag.get("lang", "")) if html_tag else ""
 
-    has_structured_data = bool(soup.find("script", attrs={"type": re.compile(r"ld\+json", re.I)}))
+    jsonld_blocks = soup.find_all("script", attrs={"type": re.compile(r"ld\+json", re.I)})
+    has_structured_data = bool(jsonld_blocks)
+    jsonld_types = _jsonld_types(jsonld_blocks)
+
+    images = soup.find_all("img")
+    images_missing_alt = sum(1 for img in images if not (img.get("alt") or "").strip())
+    robots_meta = soup.find("meta", attrs={"name": re.compile("^robots$", re.I)})
+    noindex = bool(robots_meta and "noindex" in str(robots_meta.get("content", "")).lower())
+    has_viewport = bool(soup.find("meta", attrs={"name": re.compile("^viewport$", re.I)}))
 
     h1 = [_clean(h.get_text()) for h in soup.find_all("h1")][:10]
     h2 = [_clean(h.get_text()) for h in soup.find_all("h2")][:25]
@@ -144,8 +158,40 @@ def parse_html(url: str, html: str) -> tuple[SeoSignals, str, list[str]]:
         has_structured_data=has_structured_data,
         word_count=len(text.split()),
         internal_link_count=len(links),
+        jsonld_types=jsonld_types,
+        images_total=len(images),
+        images_missing_alt=images_missing_alt,
+        noindex=noindex,
+        has_viewport=has_viewport,
     )
     return signals, text, links
+
+
+def _jsonld_types(blocks: list) -> list[str]:
+    """Les types Schema.org déclarés (Organization, FAQPage…), dédoublonnés."""
+    import json
+
+    found: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            kind = node.get("@type")
+            for k in (kind if isinstance(kind, list) else [kind]):
+                if isinstance(k, str) and k not in found:
+                    found.append(k)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    for block in blocks:
+        try:
+            walk(json.loads(block.string or block.get_text() or "{}"))
+        except (ValueError, TypeError):
+            if "JSON-LD invalide" not in found:
+                found.append("JSON-LD invalide")
+    return found
 
 
 def _robots(client: httpx.Client, base: str) -> RobotFileParser:

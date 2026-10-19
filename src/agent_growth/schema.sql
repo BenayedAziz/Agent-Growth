@@ -384,3 +384,34 @@ CREATE TABLE IF NOT EXISTS task (
     created_at  TEXT    NOT NULL,
     finished_at TEXT
 );
+
+-- --------------------------------------------------------------------------
+-- Audits SEO / GEO
+-- --------------------------------------------------------------------------
+-- Gardés dans le temps : un audit seul est une photo, une suite d'audits
+-- montre si le travail fait remonter la note.
+CREATE TABLE IF NOT EXISTS audit (
+    id         INTEGER PRIMARY KEY,
+    brand_id   INTEGER REFERENCES brand(id) ON DELETE CASCADE,
+    url        TEXT    NOT NULL,
+    score      INTEGER NOT NULL,
+    pages      INTEGER NOT NULL,
+    critique   INTEGER NOT NULL DEFAULT 0,
+    important  INTEGER NOT NULL DEFAULT 0,
+    amelioration INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS audit_by_url ON audit (url, created_at);
+
+CREATE TABLE IF NOT EXISTS audit_finding (
+    id        INTEGER PRIMARY KEY,
+    audit_id  INTEGER NOT NULL REFERENCES audit(id) ON DELETE CASCADE,
+    code      TEXT    NOT NULL,
+    severity  TEXT    NOT NULL CHECK (severity IN ('critique', 'important', 'amelioration')),
+    category  TEXT    NOT NULL,
+    title     TEXT    NOT NULL,
+    why       TEXT    NOT NULL,
+    fix       TEXT    NOT NULL,
+    urls      TEXT    NOT NULL DEFAULT '[]'
+);

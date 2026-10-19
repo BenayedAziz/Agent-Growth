@@ -1007,3 +1007,51 @@ def content_stats(conn: sqlite3.Connection, brand_id: int) -> dict[str, int]:
     rows = conn.execute("SELECT state, COUNT(*) AS n FROM content WHERE brand_id = ? GROUP BY state",
                         (brand_id,)).fetchall()
     return {r["state"]: r["n"] for r in rows}
+
+
+
+# --------------------------------------------------------------------------- #
+# Audits SEO / GEO
+# --------------------------------------------------------------------------- #
+
+def save_audit(conn: sqlite3.Connection, result, *, brand_id: int | None = None) -> int:
+    """Enregistre un audit et ses constats. `result` est un `audit.AuditResult`."""
+    counts = result.counts
+    cur = conn.execute(
+        """INSERT INTO audit (brand_id, url, score, pages, critique, important, amelioration, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, result.url, result.score, len(result.pages), counts["critique"],
+         counts["important"], counts["amelioration"], now()),
+    )
+    audit_id = int(cur.lastrowid)
+    conn.executemany(
+        """INSERT INTO audit_finding (audit_id, code, severity, category, title, why, fix, urls)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        [(audit_id, f.code, f.severity, f.category, f.title, f.why, f.fix,
+          json.dumps(f.urls, ensure_ascii=False)) for f in result.findings],
+    )
+    log(conn, brand_id=brand_id, actor="agent", action="audit SEO/GEO",
+        rationale=f"{result.url} : {result.score}/100, {counts['critique']} critique(s)")
+    conn.commit()
+    return audit_id
+
+
+def audit_history(conn: sqlite3.Connection, *, url: str | None = None,
+                  brand_id: int | None = None, limit: int = 20) -> list[sqlite3.Row]:
+    sql, args = "SELECT * FROM audit WHERE 1 = 1", []
+    if url:
+        sql += " AND url = ?"
+        args.append(url)
+    if brand_id is not None:
+        sql += " AND brand_id = ?"
+        args.append(brand_id)
+    return conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
+
+
+def audit_findings(conn: sqlite3.Connection, audit_id: int) -> list[dict]:
+    rows = conn.execute(
+        """SELECT * FROM audit_finding WHERE audit_id = ?
+           ORDER BY CASE severity WHEN 'critique' THEN 0 WHEN 'important' THEN 1 ELSE 2 END, id""",
+        (audit_id,),
+    ).fetchall()
+    return [{**dict(r), "urls": json.loads(r["urls"])} for r in rows]
