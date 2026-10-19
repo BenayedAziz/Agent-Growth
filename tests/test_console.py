@@ -123,3 +123,73 @@ def test_measured_outcome_is_displayed_with_its_cost_per_acquisition(tmp_path, d
     assert "12" in body
     assert "50 €" in body.replace(" ", " ")   # 600 / 12
     assert "par acquisition" in body
+
+
+# ------------------------------------------------------------ sécurité en ligne
+
+import base64 as _b64
+
+
+def _protected(tmp_path):
+    return TestClient(create_app(tmp_path / "p.db", password="motdepasse"))
+
+
+def _auth(user="admin", pw="motdepasse"):
+    return {"Authorization": "Basic " + _b64.b64encode(f"{user}:{pw}".encode()).decode()}
+
+
+def test_console_requires_the_password_when_one_is_set(tmp_path):
+    c = _protected(tmp_path)
+    assert c.get("/").status_code == 401
+    assert c.get("/", headers=_auth(pw="faux")).status_code == 401
+    assert c.get("/", headers=_auth()).status_code == 200
+
+
+def test_health_check_is_public_and_says_nothing(tmp_path):
+    r = _protected(tmp_path).get("/sante")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+def test_decisions_from_another_site_are_refused(tmp_path):
+    """Sans contrôle d'origine, une page tierce pourrait faire valider une dépense
+    par un navigateur déjà connecté à la console."""
+    db = tmp_path / "p.db"
+    conn = store.connect(db)
+    bid = store.add_brand(conn, slug="o", name="Oria", url="https://oria.fr")
+    cur = conn.execute("INSERT INTO campaign (brand_id, channel, name, hard_cap_eur, created_at) VALUES (?, 'meta_ads', 'A', 100, ?)",
+                       (bid, store.now()))
+    conn.commit()
+    aid = store.request_approval(conn, kind="depense", subject_table="campaign",
+                                 subject_id=int(cur.lastrowid), brand_id=bid, summary="A", amount_eur=100)
+    conn.close()
+    c = TestClient(create_app(db, password="motdepasse"))
+
+    evil = c.post(f"/validations/{aid}/valider", headers={**_auth(), "Origin": "https://evil.example"},
+                  follow_redirects=False)
+    assert evil.status_code == 403
+    no_origin = c.post(f"/validations/{aid}/valider", headers=_auth(), follow_redirects=False)
+    assert no_origin.status_code == 403
+    assert store.get_approval(store.connect(db), aid)["state"] == "en_attente"
+
+    ok = c.post(f"/validations/{aid}/valider", headers={**_auth(), "Origin": "http://testserver"},
+                follow_redirects=False)
+    assert ok.status_code == 303
+    assert store.get_approval(store.connect(db), aid)["state"] == "approuve"
+    assert store.get_approval(store.connect(db), aid)["decided_by"] == "console"
+
+
+def test_approvals_page_lists_pending_requests_and_jobs(tmp_path):
+    db = tmp_path / "p.db"
+    conn = store.connect(db)
+    bid = store.add_brand(conn, slug="o", name="Oria", url="https://oria.fr")
+    cur = conn.execute("INSERT INTO content (brand_id, channel, created_at) VALUES (?, 'instagram', ?)",
+                       (bid, store.now()))
+    conn.commit()
+    store.request_approval(conn, kind="publication", subject_table="content",
+                           subject_id=int(cur.lastrowid), brand_id=bid, summary="Post du mardi")
+    conn.close()
+    body = text(TestClient(create_app(db)).get("/validations"))
+    assert "Post du mardi" in body
+    assert "Valider" in body and "Refuser" in body
+    assert "collecter" in body and "resume" in body

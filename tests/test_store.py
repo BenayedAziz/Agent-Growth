@@ -53,8 +53,9 @@ def test_unknown_channel_is_refused(conn, brand_id):
 
 def test_connect_integration_refuses_a_real_looking_secret(conn):
     """La base ne doit jamais contenir un secret, seulement sa référence."""
-    with pytest.raises(ValueError, match="ressemble à un secret"):
-        store.connect_integration(conn, "brevo", secret_ref="sk-live-9f2c")
+    for leaked in ("sk-live-9f2c", "xkeysib-1234abcd", "https://api.x.com/?token=abc"):
+        with pytest.raises(ValueError, match="nom de variable"):
+            store.connect_integration(conn, "brevo", secret_ref=leaked)
     store.connect_integration(conn, "brevo", secret_ref="BREVO_API_KEY")
     row = next(r for r in store.list_integrations(conn) if r["slug"] == "brevo")
     assert row["state"] == "connecte"
@@ -63,7 +64,7 @@ def test_connect_integration_refuses_a_real_looking_secret(conn):
 
 def test_connect_integration_rejects_unknown_tool(conn):
     with pytest.raises(KeyError):
-        store.connect_integration(conn, "outil-inexistant", secret_ref="X")
+        store.connect_integration(conn, "outil-inexistant", secret_ref="SOME_KEY")
 
 
 def test_prospect_requires_an_origin(conn, brand_id):

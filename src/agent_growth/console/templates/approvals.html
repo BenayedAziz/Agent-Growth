@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pill, empty %}
+{% block title %}Validations{% endblock %}
+{% block content %}
+
+<h1 class="text-2xl font-semibold tracking-tight">Validations</h1>
+<p class="mt-2 max-w-2xl text-sm text-slate-500">
+  Tout ce qui publie, dépense, contacte ou modifie un site attend ici ton accord.
+  Les mêmes demandes arrivent sur Telegram ; la première décision l'emporte.
+</p>
+
+{% set kinds = {'publication': ('Publication', 'ok'), 'depense': ('Dépense', 'warn'),
+                'contact': ('Prospection', 'idle'), 'site': ('Site', 'idle')} %}
+
+<section class="mt-6 grid gap-3">
+{% for a in pending %}
+  {% set lbl, tone = kinds.get(a.kind, (a.kind, 'idle')) %}
+  <article class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <p class="text-sm text-slate-500">{{ a.brand_name or 'Portefeuille' }} · {{ pill(lbl, tone) }}</p>
+        <p class="mt-1 font-medium">{{ a.summary }}</p>
+        {% if a.amount_eur is not none %}
+          <p class="mt-1 num text-amber-700 dark:text-amber-400">Montant engagé : {{ a.amount_eur | round(0) | int }} €</p>
+        {% endif %}
+        {% if a.detail %}<p class="mt-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{{ a.detail[:600] }}</p>{% endif %}
+        <p class="mt-2 text-xs text-slate-500 num">demandé {{ a.requested_at[:16] | replace('T', ' ') }} · expire {{ (a.expires_at or '')[:16] | replace('T', ' ') }} UTC</p>
+      </div>
+      <div class="flex gap-2">
+        <form method="post" action="/validations/{{ a.id }}/valider">
+          <button class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2">Valider</button>
+        </form>
+        <form method="post" action="/validations/{{ a.id }}/refuser">
+          <button class="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline focus-visible:outline-2">Refuser</button>
+        </form>
+      </div>
+    </div>
+  </article>
+{% else %}
+  {{ empty("Rien n'attend ta validation", "Les nouvelles demandes apparaîtront ici et sur Telegram.") }}
+{% endfor %}
+</section>
+
+<h2 class="mt-10 text-lg font-semibold">Tâches automatiques</h2>
+<div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200 dark:border-slate-800">
+      <th class="px-4 py-2">Tâche</th><th class="px-4 py-2">Dernière exécution</th><th class="px-4 py-2">État</th><th class="px-4 py-2">Détail</th>
+    </tr></thead>
+    <tbody>
+    {% for name, run in jobs %}
+      <tr class="border-b border-slate-100 dark:border-slate-800 last:border-0">
+        <td class="px-4 py-2 font-medium">{{ name }}</td>
+        <td class="px-4 py-2 num text-slate-500">{{ run.started_at[:16] | replace('T', ' ') if run else 'jamais' }}</td>
+        <td class="px-4 py-2">
+          {% if not run %}{{ pill('en attente', 'idle') }}
+          {% elif run.ok == 1 %}{{ pill('ok', 'ok') }}
+          {% elif run.ok == 0 %}{{ pill('échec', 'bad') }}
+          {% else %}{{ pill('en cours', 'warn') }}{% endif %}
+        </td>
+        <td class="px-4 py-2 text-slate-500">{{ (run.detail or '')[:120] if run else '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

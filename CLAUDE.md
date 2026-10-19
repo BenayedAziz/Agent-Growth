@@ -42,7 +42,11 @@ Les deux conclusions qui commandent le code :
    on étend le schéma — on ne la devine pas dans un prompt.
 2. **Aucun chiffre sans hypothèses.** Toute estimation passe par `Estimate`
    (fourchette + hypothèses + origine). Le schéma l'impose.
-3. **Rien ne part sans validation humaine** : publier, dépenser, contacter.
+3. **Rien ne part sans validation humaine** : publier, dépenser, contacter,
+   modifier un site. Tout passe par `store.request_approval()` ; décider passe
+   par `store.decide()`. La validation automatique existe (`auto_rule`) mais
+   s'active canal par canal, et une dépense automatique exige un plafond
+   (ADR-015).
 4. **Pas d'automatisation non officielle des réseaux sociaux.** API officielles
    uniquement. Le risque porte sur le compte du client (ADR-006).
 5. **Ce qu'on ne sait pas devient une question**, pas une invention plausible.
@@ -78,7 +82,9 @@ Les deux conclusions qui commandent le code :
 | `src/agent_growth/render.py` | JSON → documents lisibles. Aucune logique métier. |
 | `src/agent_growth/schema.sql` | Les 13 tables de la console. Une colonne ajoutée après coup va aussi dans `_ADDED_COLUMNS` de `store.py`, sinon la base de production casse. |
 | `src/agent_growth/store.py` | Seul accès à la base. **Aucun secret n'y entre** : `secret_ref` est un nom de variable, jamais une valeur. |
-| `src/agent_growth/console/` | Les écrans. Rendu serveur, Jinja. Starlette 1.6 exige `TemplateResponse(request, nom, contexte)`. |
+| `src/agent_growth/console/` | Les écrans. Rendu serveur, Jinja. Starlette 1.6 exige `TemplateResponse(request, nom, contexte)`. Mot de passe obligatoire en ligne, contrôle d'origine sur tout POST. |
+| `src/agent_growth/autonomy/` | Le planificateur et le bot Telegram. **Seul `TELEGRAM_OWNER_ID` décide.** Une tâche = un nom, une cadence, une fonction ; chaque exécution va dans `job_run`. |
+| `src/agent_growth/sites/` | Un adaptateur d'écriture par plateforme. Sans accès configuré, retombe en mode manuel. Le marquage IA (`AI_MARK_HTML`) est défini dans `base.py` et nulle part ailleurs. |
 | `src/agent_growth/tools/` | Un fichier par outil. Le prompt système y vit — c'est l'actif principal. |
 | `skills/<nom>/SKILL.md` | Quand lancer l'outil et quoi faire du résultat. Jamais de logique. |
 | `skills/vendor/` | Skills externes copiées et épinglées. À relire avant activation. |
@@ -116,7 +122,15 @@ ag brand-core URL --dry-run   # vérifier le prompt sans dépenser
 ```
 
 Les tests ne doivent jamais appeler l'API ni le réseau. Pour tester un rendu,
-utiliser le fixture `doc` de `tests/conftest.py`.
+utiliser le fixture `doc` de `tests/conftest.py`. Pour une API externe
+(Telegram, WordPress, Shopify, GitHub), `httpx2.MockTransport` — voir
+`tests/test_sites.py`.
+
+Les fichiers non Python (gabarits, `schema.sql`) doivent figurer dans
+`[tool.setuptools.package-data]` de `pyproject.toml`, sinon le déploiement
+plante alors que tout marche en local.
+
+Mise en ligne : [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ## Modèle
 

@@ -18,3 +18,7 @@ brands/*
 
 # OS
 .DS_Store
+
+# Artefacts de compilation
+build/
+dist/

@@ -33,14 +33,18 @@ CREATE TABLE IF NOT EXISTS site (
     id           INTEGER PRIMARY KEY,
     brand_id     INTEGER NOT NULL REFERENCES brand(id) ON DELETE CASCADE,
     url          TEXT    NOT NULL,
-    -- Détermine l'adaptateur d'écriture à utiliser (PLATEFORME.md).
-    platform     TEXT    NOT NULL DEFAULT 'inconnue'
-                         CHECK (platform IN ('wordpress', 'shopify', 'wix',
-                                             'squarespace', 'webflow',
-                                             'statique', 'inconnue')),
+    -- Détermine l'adaptateur d'écriture (sites/). La liste des valeurs vit
+    -- dans store.PLATFORMS : un CHECK SQLite ne peut pas évoluer sans recréer
+    -- la table, et de nouvelles plateformes arriveront.
+    platform     TEXT    NOT NULL DEFAULT 'inconnue',
     page_count   INTEGER,
     write_access TEXT    NOT NULL DEFAULT 'aucun'
                          CHECK (write_access IN ('aucun', 'api', 'git', 'manuel')),
+    -- Nom de la variable d'environnement qui porte l'accès. Jamais la valeur.
+    secret_ref   TEXT    NOT NULL DEFAULT '',
+    -- Réglages propres à l'adaptateur : utilisateur WordPress, boutique
+    -- Shopify, dépôt GitHub et dossier de contenu…
+    config       TEXT    NOT NULL DEFAULT '{}',
     UNIQUE (brand_id, url)
 );
 
@@ -231,3 +235,95 @@ CREATE TABLE IF NOT EXISTS outreach (
 );
 
 CREATE INDEX IF NOT EXISTS outreach_queue ON outreach (state, scheduled_for);
+
+-- --------------------------------------------------------------------------
+-- Autonomie : la file de validation
+-- --------------------------------------------------------------------------
+-- Tout ce qui publie, dépense, contacte ou modifie un site passe par ici.
+-- Le système prépare ; l'humain valide en un geste (Telegram ou console).
+-- Une demande est liée à son objet (`subject_table`, `subject_id`), et décider
+-- fait avancer l'objet — jamais l'inverse.
+CREATE TABLE IF NOT EXISTS approval (
+    id            INTEGER PRIMARY KEY,
+    brand_id      INTEGER REFERENCES brand(id) ON DELETE CASCADE,
+    kind          TEXT    NOT NULL
+                          CHECK (kind IN ('publication', 'depense', 'contact', 'site')),
+    subject_table TEXT    NOT NULL
+                          CHECK (subject_table IN ('content', 'campaign', 'outreach', 'site_change')),
+    subject_id    INTEGER NOT NULL,
+    summary       TEXT    NOT NULL,
+    detail        TEXT    NOT NULL DEFAULT '',
+    -- Montant engagé si on valide. Affiché en clair dans la notification.
+    amount_eur    REAL,
+    state         TEXT    NOT NULL DEFAULT 'en_attente'
+                          CHECK (state IN ('en_attente', 'approuve', 'refuse', 'expire')),
+    requested_at  TEXT    NOT NULL,
+    -- Une dépense validée trois jours trop tard n'a plus de sens : elle expire.
+    expires_at    TEXT,
+    decided_at    TEXT,
+    decided_by    TEXT    NOT NULL DEFAULT '',
+    -- Identifiant du message de notification, pour le mettre à jour.
+    notified_ref  TEXT    NOT NULL DEFAULT ''
+);
+
+-- Jamais deux demandes en attente pour le même objet.
+CREATE UNIQUE INDEX IF NOT EXISTS approval_one_pending
+    ON approval (subject_table, subject_id) WHERE state = 'en_attente';
+CREATE INDEX IF NOT EXISTS approval_queue ON approval (state, requested_at);
+
+-- Validation automatique, activée canal par canal, marque par marque, quand la
+-- confiance est établie. Une dépense automatique exige un plafond : c'est le
+-- schéma qui l'impose.
+CREATE TABLE IF NOT EXISTS auto_rule (
+    id         INTEGER PRIMARY KEY,
+    brand_id   INTEGER NOT NULL REFERENCES brand(id) ON DELETE CASCADE,
+    kind       TEXT    NOT NULL CHECK (kind IN ('publication', 'depense', 'contact', 'site')),
+    channel    TEXT    NOT NULL DEFAULT '*',
+    max_eur    REAL,
+    enabled    INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT    NOT NULL,
+    CHECK (kind != 'depense' OR max_eur IS NOT NULL),
+    UNIQUE (brand_id, kind, channel)
+);
+
+-- --------------------------------------------------------------------------
+-- Modifications de site
+-- --------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS site_change (
+    id         INTEGER PRIMARY KEY,
+    brand_id   INTEGER NOT NULL REFERENCES brand(id) ON DELETE CASCADE,
+    site_id    INTEGER NOT NULL REFERENCES site(id) ON DELETE CASCADE,
+    kind       TEXT    NOT NULL CHECK (kind IN ('page_create', 'page_update')),
+    -- Identifiant ou chemin de la page visée ; vide pour une création.
+    target     TEXT    NOT NULL DEFAULT '',
+    title      TEXT    NOT NULL DEFAULT '',
+    body       TEXT    NOT NULL DEFAULT '',
+    slug       TEXT    NOT NULL DEFAULT '',
+    meta       TEXT    NOT NULL DEFAULT '{}',
+    state      TEXT    NOT NULL DEFAULT 'propose'
+                       CHECK (state IN ('propose', 'a_valider', 'approuve', 'applique',
+                                        'manuel', 'echec', 'refuse')),
+    ai_generated INTEGER NOT NULL DEFAULT 1 CHECK (ai_generated IN (0, 1)),
+    result     TEXT    NOT NULL DEFAULT '',
+    applied_at TEXT,
+    created_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS site_change_queue ON site_change (state);
+
+-- --------------------------------------------------------------------------
+-- Planificateur
+-- --------------------------------------------------------------------------
+-- Une ligne par exécution. Sert à savoir quand une tâche a tourné pour la
+-- dernière fois — donc à ne jamais la lancer deux fois — et à afficher les
+-- échecs au lieu de les avaler.
+CREATE TABLE IF NOT EXISTS job_run (
+    id          INTEGER PRIMARY KEY,
+    job         TEXT    NOT NULL,
+    started_at  TEXT    NOT NULL,
+    finished_at TEXT,
+    ok          INTEGER CHECK (ok IN (0, 1)),
+    detail      TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS job_run_last ON job_run (job, started_at);

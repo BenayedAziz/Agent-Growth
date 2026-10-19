@@ -486,3 +486,44 @@ constructeur — un système qui n'a pas besoin d'être construit retire la rais
 de payer. Les agences vendent du temps. C'est une contrainte de trésorerie, pas
 d'ingénierie, et c'est la seule sorte de fossé qui tient face à quelqu'un de
 cent fois plus gros.
+
+---
+
+## ADR-015 — L'autonomie : préparer seul, valider en un geste
+
+*2026-10-19 · adopté*
+
+**Demande.** « Lancer pour tout gérer de manière autonome. »
+
+**Décision du fondateur** parmi trois niveaux proposés : le système prépare et
+programme tout seul ; l'humain valide en un geste ; la validation automatique
+s'active ensuite canal par canal, marque par marque, quand la confiance est
+établie. Ça préserve la règle n° 3 sans la rendre coûteuse : c'est l'hypothèse
+dont dépend tout le modèle (VISION.md) — *que valider reste plus rapide que
+faire.*
+
+**Mise en œuvre.**
+
+- **Une seule file de validation** (`approval`) pour publier, dépenser,
+  contacter et modifier un site. Décider fait avancer l'objet par une table de
+  transitions unique ; aucun autre code ne le fait.
+- **Idempotence** : un double appui ne s'applique qu'une fois. **Expiration** :
+  une dépense validée 48 h trop tard ne s'applique pas, et libère son objet.
+- **Validation automatique** (`auto_rule`) par marque, nature et canal. Une
+  dépense automatique sans plafond est refusée **par le schéma** ; au-delà du
+  plafond, ou à montant inconnu, la décision revient à l'humain.
+- **Telegram** comme canal de validation. Seul `TELEGRAM_OWNER_ID` décide ; les
+  inconnus sont ignorés sans confirmation que la demande existe. Le jeton est
+  retiré de toute erreur avant journalisation.
+- **Console** protégée par mot de passe — elle refuse de démarrer exposée sans
+  — et contrôle d'origine sur toute action, pour qu'une page tierce ne puisse
+  pas faire valider une dépense par un navigateur déjà connecté.
+- **Railway**, un seul service et une seule instance (SQLite sur volume
+  persistant), avec un point de santé public qui ne renvoie que « ok ».
+
+**Adaptateurs de sites.** WordPress (mot de passe d'application, brouillon par
+défaut), Shopify (Admin GraphQL, non publié par défaut), sites sur mesure par
+pull request GitHub (jamais d'écriture sur la branche principale), et mode
+manuel pour les plateformes fermées — SpeedMedia, CMS des agences de voyage,
+n'a pas d'API d'écriture publique connue. Sans accès configuré, toute
+plateforme retombe en mode manuel plutôt qu'en écriture à l'aveugle.

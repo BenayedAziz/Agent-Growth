@@ -269,6 +269,10 @@ Dans l'ordre de probabilité, pas de gravité.
 | **Registre des outils branchables** (37 outils, 9 catégories) | ✅ `ag tools`, `ag connect` |
 | **Les écrans** : portefeuille, fiche marque, outils | ✅ `ag serve` |
 | **Modèle de prospection** : prospects, séquences, envois, RGPD dans le schéma | ✅ construit, testé |
+| **Autonomie** : file de validation, validation automatique plafonnée, planificateur 24/7 | ✅ construit, testé |
+| **Telegram** : validation en un geste, seul le propriétaire décide | ✅ construit, testé |
+| **Adaptateurs de sites** : WordPress, Shopify, sur mesure (GitHub), manuel (SpeedMedia…) | ✅ construit, testé |
+| **Mise en ligne** : Railway, mot de passe obligatoire, volume persistant | ✅ prêt — [DEPLOIEMENT.md](DEPLOIEMENT.md) |
 | Module 2 — Collecte (les connecteurs) | 🔜 le prochain chantier |
 | Modules 3 à 7 | ⬜ |
 
@@ -282,6 +286,19 @@ ag tools                                     # les 37 outils et leur mode d'acc�
 ag connect ga4 GOOGLE_OAUTH_REFRESH          # une référence, jamais un secret
 ag serve                                     # la console sur http://127.0.0.1:8000
 ```
+
+## Pistes repérées, à intégrer
+
+- **Création vidéo par MCP.** Higgsfield expose un serveur MCP officiel
+  (`mcp.higgsfield.ai/mcp`, depuis le 30 avril 2026) et une compétence
+  « Katana » qui refait un montage de référence avec les visuels de la marque.
+  À brancher plutôt qu'à reconstruire (ADR-009). Le nom « Claude Motion » n'est
+  attesté que par les supports de Higgsfield : à vérifier avant d'en dépendre.
+- **Veille des annonces gagnantes.** Une annonce qui tourne depuis longtemps est
+  une annonce qui rapporte : l'annonceur coupe les perdantes. C'est un signal de
+  pré-test gratuit et public. La bibliothèque publicitaire de Meta expose par
+  API toutes les annonces diffusées dans l'UE (article 39 du DSA) — à confirmer
+  dans la documentation officielle avant de construire dessus.
 
 ## La prochaine chose à faire
 

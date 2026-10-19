@@ -37,6 +37,19 @@ CHANNELS: dict[str, str] = {
     "email": "E-mail",
 }
 
+#: Plateformes de site, et l'adaptateur d'écriture qui va avec (sites/).
+#: « manuel » = pas d'API d'écriture : on prépare, l'humain colle.
+PLATFORMS: dict[str, str] = {
+    "wordpress": "api",
+    "shopify": "api",
+    "sur_mesure": "git",      # site développé et versionné sur GitHub
+    "speedmedia": "manuel",   # CMS fermé des agences de voyage
+    "wix": "manuel",
+    "squarespace": "manuel",
+    "webflow": "manuel",
+    "inconnue": "manuel",
+}
+
 #: Canaux qui dépensent de l'argent : ils imposent un plafond et une validation.
 PAID_CHANNELS = frozenset({"google_ads", "meta_ads"})
 
@@ -88,8 +101,13 @@ def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
     """Ouvre la base, la crée si besoin, et applique le schéma."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    # Plusieurs fils écrivent (console, planificateur, Telegram) : le journal
+    # WAL laisse lire pendant qu'on écrit, et l'attente évite les « database is
+    # locked ». Chaque fil ouvre sa propre connexion.
+    conn = sqlite3.connect(path, timeout=15, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    if str(path) != ":memory:":
+        conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA.read_text(encoding="utf-8"))
     _migrate(conn)
@@ -102,6 +120,8 @@ def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
 #: de production. Chaque entrée est `(table, colonne, définition)`.
 _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("brand", "core_path", "TEXT NOT NULL DEFAULT ''"),
+    ("site", "secret_ref", "TEXT NOT NULL DEFAULT ''"),
+    ("site", "config", "TEXT NOT NULL DEFAULT '{}'"),
 )
 
 
@@ -165,15 +185,31 @@ def add_site(
     *,
     platform: str = "inconnue",
     page_count: int | None = None,
-    write_access: str = "aucun",
+    write_access: str | None = None,
+    secret_ref: str = "",
+    config: dict | None = None,
 ) -> int:
-    cur = conn.execute(
-        """INSERT OR IGNORE INTO site (brand_id, url, platform, page_count, write_access)
-           VALUES (?, ?, ?, ?, ?)""",
-        (brand_id, url, platform, page_count, write_access),
+    if platform not in PLATFORMS:
+        raise ValueError(f"Plateforme inconnue : {platform}. Connues : {', '.join(PLATFORMS)}")
+    _check_secret_ref(secret_ref)
+    access = write_access or (PLATFORMS[platform] if secret_ref or PLATFORMS[platform] == "manuel" else "aucun")
+    conn.execute(
+        """INSERT INTO site (brand_id, url, platform, page_count, write_access, secret_ref, config)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (brand_id, url) DO UPDATE SET
+               platform = excluded.platform, write_access = excluded.write_access,
+               secret_ref = excluded.secret_ref, config = excluded.config,
+               page_count = COALESCE(excluded.page_count, site.page_count)""",
+        (brand_id, url, platform, page_count, access, secret_ref,
+         json.dumps(config or {}, ensure_ascii=False)),
     )
     conn.commit()
-    return int(cur.lastrowid)
+    row = conn.execute("SELECT id FROM site WHERE brand_id = ? AND url = ?", (brand_id, url)).fetchone()
+    return int(row["id"])
+
+
+def get_site(conn: sqlite3.Connection, site_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM site WHERE id = ?", (site_id,)).fetchone()
 
 
 def add_channel(conn: sqlite3.Connection, brand_id: int, kind: str, *, handle: str = "") -> None:
@@ -540,14 +576,25 @@ def list_integrations(conn: sqlite3.Connection, *, category: str | None = None) 
     return conn.execute(sql + " ORDER BY category, name", args).fetchall()
 
 
+def _check_secret_ref(secret_ref: str) -> None:
+    """Une référence est un NOM de variable : majuscules, chiffres, soulignés.
+
+    Tout le reste — une clé collée par erreur, une URL avec un jeton — est
+    refusé avant d'atteindre la base.
+    """
+    import re
+
+    if secret_ref and not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", secret_ref):
+        raise ValueError(
+            "La référence doit être un nom de variable d'environnement "
+            "(ex. « BREVO_API_KEY »), pas la valeur du secret."
+        )
+
+
 def connect_integration(conn: sqlite3.Connection, slug: str, *, secret_ref: str) -> None:
     """Marque un outil comme connecté. `secret_ref` est un nom de variable
     d'environnement ou une clé de coffre — **jamais** le secret."""
-    if secret_ref.strip().startswith(("sk-", "key-")) or len(secret_ref) > 80:
-        raise ValueError(
-            "secret_ref ressemble à un secret. Donne un nom de référence "
-            "(ex. « BREVO_API_KEY »), pas la valeur."
-        )
+    _check_secret_ref(secret_ref)
     cur = conn.execute(
         """UPDATE integration SET state = 'connecte', secret_ref = ?, connected_at = ?, last_error = ''
            WHERE slug = ?""",
@@ -633,3 +680,262 @@ def pipeline(conn: sqlite3.Connection, brand_id: int) -> dict[str, int]:
         (brand_id,),
     ).fetchall()
     return {r["state"]: r["n"] for r in rows}
+
+
+
+# --------------------------------------------------------------------------- #
+# Autonomie : la file de validation
+# --------------------------------------------------------------------------- #
+# Ce que décider fait à l'objet validé. Une seule table de transitions : aucun
+# autre endroit du code ne fait avancer un contenu, une campagne, un envoi ou
+# une modification de site après une décision.
+
+APPROVE_TRANSITIONS: dict[str, tuple[str, str]] = {
+    "content": ("a_valider", "valide"),
+    "campaign": ("a_valider", "active"),
+    "outreach": ("a_valider", "prevu"),
+    "site_change": ("a_valider", "approuve"),
+}
+REFUSE_TRANSITIONS: dict[str, tuple[str, str]] = {
+    "content": ("a_valider", "rejete"),
+    "campaign": ("a_valider", "brouillon"),
+    "outreach": ("a_valider", "annule"),
+    "site_change": ("a_valider", "refuse"),
+}
+
+#: Durée de validité d'une demande, par nature. Une dépense validée trop tard
+#: s'applique à un contexte qui n'existe plus.
+APPROVAL_TTL_HOURS: dict[str, int] = {"depense": 48, "contact": 72, "publication": 72, "site": 168}
+
+
+def request_approval(
+    conn: sqlite3.Connection,
+    *,
+    kind: str,
+    subject_table: str,
+    subject_id: int,
+    summary: str,
+    brand_id: int | None = None,
+    detail: str = "",
+    amount_eur: float | None = None,
+    channel: str = "*",
+) -> int | None:
+    """Demande une validation, ou l'accorde d'office si une règle automatique
+    couvre ce cas. Renvoie l'identifiant de la demande, ou `None` si elle a été
+    accordée automatiquement.
+
+    L'objet passe en `a_valider` ici, dans la même transaction : il ne peut pas
+    exister de demande pour un objet qui n'attend rien.
+    """
+    if subject_table not in APPROVE_TRANSITIONS:
+        raise ValueError(f"Objet non validable : {subject_table}")
+    conn.execute(
+        f"UPDATE {subject_table} SET state = 'a_valider' WHERE id = ?", (subject_id,)
+    )
+
+    rule = _auto_rule(conn, brand_id, kind, channel, amount_eur)
+    if rule is not None:
+        _transition(conn, subject_table, subject_id, APPROVE_TRANSITIONS)
+        log(conn, brand_id=brand_id, actor="agent", action=f"validation automatique : {kind}",
+            rationale=f"règle n°{rule} — {summary}",
+            payload={"subject": subject_table, "id": subject_id, "amount_eur": amount_eur})
+        conn.commit()
+        return None
+
+    expires = (datetime.now(timezone.utc) + timedelta(hours=APPROVAL_TTL_HOURS[kind])).isoformat(timespec="seconds")
+    cur = conn.execute(
+        """INSERT INTO approval (brand_id, kind, subject_table, subject_id, summary, detail,
+                                 amount_eur, requested_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (brand_id, kind, subject_table, subject_id, summary, detail, amount_eur, now(), expires),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def decide(conn: sqlite3.Connection, approval_id: int, *, approve: bool, by: str) -> bool:
+    """Applique une décision. Renvoie False si la demande n'est plus en attente.
+
+    L'idempotence est volontaire : un double appui sur « Valider » dans
+    Telegram ne doit jamais lancer deux fois une dépense.
+    """
+    row = conn.execute(
+        "SELECT * FROM approval WHERE id = ? AND state = 'en_attente'", (approval_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    if row["expires_at"] and row["expires_at"] < now():
+        # Expirée : on la clôt ET on libère l'objet, sinon il resterait bloqué
+        # en « à valider » sans plus aucune demande pour le débloquer.
+        conn.execute("UPDATE approval SET state = 'expire' WHERE id = ?", (approval_id,))
+        _transition(conn, row["subject_table"], row["subject_id"], REFUSE_TRANSITIONS)
+        conn.commit()
+        return False
+
+    cur = conn.execute(
+        """UPDATE approval SET state = ?, decided_at = ?, decided_by = ?
+           WHERE id = ? AND state = 'en_attente'""",
+        ("approuve" if approve else "refuse", now(), by, approval_id),
+    )
+    if cur.rowcount != 1:      # décidé entre-temps par un autre canal
+        conn.rollback()
+        return False
+    _transition(conn, row["subject_table"], row["subject_id"],
+                APPROVE_TRANSITIONS if approve else REFUSE_TRANSITIONS)
+    log(conn, brand_id=row["brand_id"], actor="humain",
+        action=f"{'validé' if approve else 'refusé'} : {row['kind']}",
+        rationale=row["summary"], payload={"approval": approval_id, "par": by})
+    conn.commit()
+    return True
+
+
+def expire_stale(conn: sqlite3.Connection) -> int:
+    """Expire les demandes dépassées et remet leur objet en brouillon."""
+    stale = conn.execute(
+        "SELECT * FROM approval WHERE state = 'en_attente' AND expires_at < ?", (now(),)
+    ).fetchall()
+    for row in stale:
+        conn.execute("UPDATE approval SET state = 'expire' WHERE id = ?", (row["id"],))
+        _transition(conn, row["subject_table"], row["subject_id"], REFUSE_TRANSITIONS)
+    conn.commit()
+    return len(stale)
+
+
+def pending_approvals(conn: sqlite3.Connection, *, unnotified_only: bool = False) -> list[sqlite3.Row]:
+    sql = """SELECT a.*, b.name AS brand_name FROM approval a
+             LEFT JOIN brand b ON b.id = a.brand_id
+             WHERE a.state = 'en_attente'"""
+    if unnotified_only:
+        sql += " AND a.notified_ref = ''"
+    return conn.execute(sql + " ORDER BY a.requested_at", ()).fetchall()
+
+
+def mark_notified(conn: sqlite3.Connection, approval_id: int, ref: str) -> None:
+    conn.execute("UPDATE approval SET notified_ref = ? WHERE id = ?", (ref, approval_id))
+    conn.commit()
+
+
+def get_approval(conn: sqlite3.Connection, approval_id: int) -> sqlite3.Row | None:
+    return conn.execute(
+        """SELECT a.*, b.name AS brand_name FROM approval a
+           LEFT JOIN brand b ON b.id = a.brand_id WHERE a.id = ?""",
+        (approval_id,),
+    ).fetchone()
+
+
+def add_auto_rule(
+    conn: sqlite3.Connection, brand_id: int, kind: str, *, channel: str = "*",
+    max_eur: float | None = None,
+) -> int:
+    """Active la validation automatique pour un cas précis. Une dépense
+    automatique sans plafond est refusée par le schéma lui-même."""
+    cur = conn.execute(
+        """INSERT INTO auto_rule (brand_id, kind, channel, max_eur, created_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (brand_id, kind, channel) DO UPDATE SET
+               max_eur = excluded.max_eur, enabled = 1""",
+        (brand_id, kind, channel, max_eur, now()),
+    )
+    log(conn, brand_id=brand_id, actor="humain", action=f"validation automatique activée : {kind}",
+        rationale=f"canal {channel}" + (f", plafond {max_eur:.0f} €" if max_eur is not None else ""))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def _auto_rule(conn: sqlite3.Connection, brand_id: int | None, kind: str,
+               channel: str, amount_eur: float | None) -> int | None:
+    if brand_id is None:
+        return None
+    row = conn.execute(
+        """SELECT id, max_eur FROM auto_rule
+           WHERE brand_id = ? AND kind = ? AND enabled = 1 AND channel IN (?, '*')
+           ORDER BY channel = '*' LIMIT 1""",
+        (brand_id, kind, channel),
+    ).fetchone()
+    if row is None:
+        return None
+    if row["max_eur"] is not None and (amount_eur is None or amount_eur > row["max_eur"]):
+        return None        # au-dessus du plafond, ou montant inconnu : un humain décide
+    return int(row["id"])
+
+
+def _transition(conn: sqlite3.Connection, table: str, subject_id: int,
+                transitions: dict[str, tuple[str, str]]) -> None:
+    before, after = transitions[table]
+    conn.execute(f"UPDATE {table} SET state = ? WHERE id = ? AND state = ?",
+                 (after, subject_id, before))
+
+
+# --------------------------------------------------------------------------- #
+# Modifications de site
+# --------------------------------------------------------------------------- #
+
+def propose_site_change(
+    conn: sqlite3.Connection, site_id: int, *, kind: str, title: str, body: str,
+    target: str = "", slug: str = "", meta: dict | None = None, ai_generated: bool = True,
+) -> tuple[int, int | None]:
+    """Propose une modification et demande sa validation. Rien ne touche le
+    site avant le « oui ». Renvoie (modification, demande)."""
+    site = get_site(conn, site_id)
+    if site is None:
+        raise KeyError(f"Site inconnu : {site_id}")
+    cur = conn.execute(
+        """INSERT INTO site_change (brand_id, site_id, kind, target, title, body, slug, meta,
+                                    ai_generated, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (site["brand_id"], site_id, kind, target, title, body, slug,
+         json.dumps(meta or {}, ensure_ascii=False), int(ai_generated), now()),
+    )
+    change_id = int(cur.lastrowid)
+    verb = "Créer" if kind == "page_create" else "Modifier"
+    approval_id = request_approval(
+        conn, kind="site", subject_table="site_change", subject_id=change_id,
+        brand_id=site["brand_id"], channel="site",
+        summary=f"{verb} la page « {title} » sur {site['url']}",
+        detail=body[:600],
+    )
+    return change_id, approval_id
+
+
+def site_changes(conn: sqlite3.Connection, state: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM site_change WHERE state = ? ORDER BY created_at", (state,)
+    ).fetchall()
+
+
+def finish_site_change(conn: sqlite3.Connection, change_id: int, *, state: str, result: str) -> None:
+    conn.execute(
+        "UPDATE site_change SET state = ?, result = ?, applied_at = ? WHERE id = ?",
+        (state, result, now(), change_id),
+    )
+    conn.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Planificateur
+# --------------------------------------------------------------------------- #
+
+def job_started(conn: sqlite3.Connection, job: str) -> int:
+    cur = conn.execute("INSERT INTO job_run (job, started_at) VALUES (?, ?)", (job, now()))
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def job_finished(conn: sqlite3.Connection, run_id: int, *, ok: bool, detail: str = "") -> None:
+    conn.execute(
+        "UPDATE job_run SET finished_at = ?, ok = ?, detail = ? WHERE id = ?",
+        (now(), int(ok), detail[:2000], run_id),
+    )
+    conn.commit()
+
+
+def last_job_run(conn: sqlite3.Connection, job: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM job_run WHERE job = ? ORDER BY started_at DESC, id DESC LIMIT 1", (job,)
+    ).fetchone()
+
+
+def recent_failures(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM job_run WHERE ok = 0 ORDER BY started_at DESC LIMIT ?", (limit,)
+    ).fetchall()

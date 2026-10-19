@@ -1,0 +1,11 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+brands
+.env
+.env.*
+tests
+docs

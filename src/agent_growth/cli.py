@@ -2,7 +2,10 @@
 
 La console :
 
-    ag serve                ouvrir la console multi-marques
+    ag run                  production : console + planificateur + Telegram
+    ag serve                ouvrir la console en local (sans tâches automatiques)
+    ag site add <marque> <url>   brancher un site (WordPress, Shopify, sur mesure…)
+    ag site propose <site>  proposer une page (validation requise avant écriture)
     ag brand add <url>      enregistrer une marque
     ag brand list           lister les marques
     ag import-core <json>   enregistrer une marque depuis son brand-core.json
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -117,14 +121,106 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
-    """Ouvre la console. Elle lit la base, jamais les API directement."""
+    """Ouvre la console en local, sans tâches automatiques."""
     import uvicorn
 
     from .console.app import create_app
 
+    password = os.environ.get("AG_CONSOLE_PASSWORD") or None
+    if args.host not in LOOPBACK and not password:
+        print("✗ Console exposée sans mot de passe : définis AG_CONSOLE_PASSWORD.", file=sys.stderr)
+        return 2
     print(f"Console sur http://{args.host}:{args.port}  (base : {args.db})", file=sys.stderr)
-    uvicorn.run(create_app(args.db), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(create_app(args.db, password=password), host=args.host, port=args.port,
+                log_level="warning")
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """La production : console, planificateur et Telegram dans un seul service.
+
+    Un seul processus, parce que la base est SQLite : deux répliques écriraient
+    chacune de leur côté. Sur Railway, garder une seule instance.
+    """
+    import logging
+
+    import uvicorn
+
+    from .autonomy import scheduler, telegram
+    from .console.app import create_app
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    password = os.environ.get("AG_CONSOLE_PASSWORD") or None
+    if args.host not in LOOPBACK and not password:
+        # Refus dur : une console ouverte sur Internet permettrait à n'importe
+        # qui de valider une dépense.
+        print("✗ AG_CONSOLE_PASSWORD manquant. La console ne démarre pas exposée sans mot de passe.",
+              file=sys.stderr)
+        return 2
+
+    bot = telegram.from_env()
+    if bot is None:
+        print("! TELEGRAM_BOT_TOKEN absent : validations par la console uniquement.", file=sys.stderr)
+    elif bot.owner_id is None:
+        print("! TELEGRAM_OWNER_ID absent : envoie /start au bot pour obtenir ton identifiant.",
+              file=sys.stderr)
+
+    ctx = scheduler.Context(db_path=Path(args.db), telegram=bot)
+    port = args.port or int(os.environ.get("PORT", "8000"))
+    print(f"Agent Growth sur {args.host}:{port} — base {args.db}", file=sys.stderr)
+    uvicorn.run(create_app(args.db, password=password, worker=ctx,
+                           user=os.environ.get("AG_CONSOLE_USER", "admin")),
+                host=args.host, port=port, log_level="info", proxy_headers=True)
+    return 0
+
+
+def cmd_site_add(args: argparse.Namespace) -> int:
+    conn = store.connect(args.db)
+    brand = store.get_brand(conn, args.brand)
+    if brand is None:
+        print(f"✗ Marque inconnue : {args.brand}. Voir « ag brand list ».", file=sys.stderr)
+        return 1
+    config = {}
+    for item in args.config:
+        key, _, value = item.partition("=")
+        config[key.strip()] = value.strip()
+    try:
+        site_id = store.add_site(conn, int(brand["id"]), args.url, platform=args.platform,
+                                 secret_ref=args.secret_ref or "", config=config)
+    except ValueError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+    site = store.get_site(conn, site_id)
+    mode = {"api": "écriture par API", "git": "pull request GitHub",
+            "manuel": "dossier prêt à coller", "aucun": "lecture seule"}[site["write_access"]]
+    print(f"✓ site n°{site_id} — {args.platform} — {mode}", file=sys.stderr)
+    if args.secret_ref and not os.environ.get(args.secret_ref):
+        print(f"! La variable {args.secret_ref} n'est pas définie ici. Ajoute-la dans Railway.",
+              file=sys.stderr)
+    return 0
+
+
+def cmd_site_propose(args: argparse.Namespace) -> int:
+    conn = store.connect(args.db)
+    body = Path(args.body_file).read_text(encoding="utf-8") if args.body_file else (args.body or "")
+    try:
+        change_id, approval_id = store.propose_site_change(
+            conn, args.site, kind="page_update" if args.target else "page_create",
+            title=args.title, body=body, target=args.target or "",
+            meta={"description": args.description} if args.description else None,
+        )
+    except KeyError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+    if approval_id is None:
+        print(f"✓ modification n°{change_id} validée automatiquement (règle active)", file=sys.stderr)
+    else:
+        print(f"✓ modification n°{change_id} en attente de validation (demande n°{approval_id})",
+              file=sys.stderr)
     return 0
 
 
@@ -207,8 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Agent Growth — le marketing digital d'une marque, piloté par sa ligne éditoriale.",
     )
     parser.add_argument("--version", action="version", version=f"agent-growth {__version__}")
-    parser.add_argument("--db", default=str(store.DEFAULT_DB),
-                        help=f"base de la console (défaut : {store.DEFAULT_DB})")
+    parser.add_argument("--db", default=os.environ.get("AG_DB", str(store.DEFAULT_DB)),
+                        help=f"base de la console (défaut : $AG_DB, sinon {store.DEFAULT_DB})")
     sub = parser.add_subparsers(dest="command", required=True)
 
     core = sub.add_parser("brand-core", help="construire la ligne éditoriale de la marque")
@@ -234,7 +330,32 @@ def build_parser() -> argparse.ArgumentParser:
     render.set_defaults(func=cmd_render)
 
     # ---- la console ----------------------------------------------------- #
-    serve = sub.add_parser("serve", help="ouvrir la console multi-marques")
+    run = sub.add_parser("run", help="production : console + planificateur + Telegram")
+    run.add_argument("--host", default="0.0.0.0")
+    run.add_argument("--port", type=int, default=0, help="défaut : $PORT, sinon 8000")
+    run.set_defaults(func=cmd_run)
+
+    site = sub.add_parser("site", help="brancher et modifier les sites")
+    site_sub = site.add_subparsers(dest="site_cmd", required=True)
+    sadd = site_sub.add_parser("add", help="brancher un site")
+    sadd.add_argument("brand", help="identifiant de la marque (voir ag brand list)")
+    sadd.add_argument("url")
+    sadd.add_argument("--platform", required=True, choices=tuple(store.PLATFORMS))
+    sadd.add_argument("--secret-ref", help="NOM de la variable qui porte l'accès (jamais la valeur)")
+    sadd.add_argument("--config", action="append", default=[], metavar="CLÉ=VALEUR",
+                      help="ex. user=admin, shop=x.myshopify.com, repo=moi/site, dir=content/pages")
+    sadd.set_defaults(func=cmd_site_add)
+
+    sprop = site_sub.add_parser("propose", help="proposer une page ; rien n'est écrit avant validation")
+    sprop.add_argument("site", type=int, help="numéro du site")
+    sprop.add_argument("--title", required=True)
+    sprop.add_argument("--body")
+    sprop.add_argument("--body-file")
+    sprop.add_argument("--target", help="page existante à modifier (identifiant ou chemin)")
+    sprop.add_argument("--description", help="meta description")
+    sprop.set_defaults(func=cmd_site_propose)
+
+    serve = sub.add_parser("serve", help="ouvrir la console en local, sans tâches automatiques")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(func=cmd_serve)

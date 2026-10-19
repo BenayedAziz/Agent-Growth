@@ -10,12 +10,18 @@ trous ne sert à rien.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import secrets
 import sqlite3
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .. import store
@@ -46,9 +52,54 @@ PIPELINE_LABELS = {
 }
 
 
-def create_app(db_path: Path | str = store.DEFAULT_DB) -> FastAPI:
-    app = FastAPI(title="Agent Growth — console", docs_url=None, redoc_url=None)
+#: Chemins accessibles sans mot de passe. Le point de santé ne renvoie rien
+#: d'autre que « ok » : Railway s'en sert pour savoir si le service vit.
+PUBLIC_PATHS = frozenset({"/sante"})
+
+
+def create_app(
+    db_path: Path | str = store.DEFAULT_DB,
+    *,
+    password: str | None = None,
+    user: str = "admin",
+    worker: object | None = None,
+) -> FastAPI:
+    """La console. `password` protège tout sauf `/sante`. `worker` est un
+    `autonomy.scheduler.Context` : s'il est fourni, le planificateur et l'écoute
+    Telegram démarrent avec le serveur et s'arrêtent avec lui."""
+    stop = threading.Event()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if worker is not None:
+            from ..autonomy import scheduler
+
+            scheduler.start(worker, stop)  # type: ignore[arg-type]
+        yield
+        stop.set()
+
+    app = FastAPI(title="Agent Growth — console", docs_url=None, redoc_url=None,
+                  openapi_url=None, lifespan=lifespan)
     db_path = Path(db_path)
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        if request.url.path in PUBLIC_PATHS:
+            return await call_next(request)
+        if password:
+            if not _authorized(request.headers.get("authorization", ""), user, password):
+                return Response("Authentification requise.", status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="Agent Growth", charset="UTF-8"'})
+        # Les actions (POST) doivent venir de la console elle-même. Sans ce
+        # contrôle, une page tierce pourrait faire valider une dépense par le
+        # navigateur déjà connecté.
+        if request.method == "POST" and not _same_origin(request):
+            return Response("Requête refusée : origine inconnue.", status_code=403)
+        return await call_next(request)
+
+    @app.get("/sante")
+    def health() -> JSONResponse:
+        return JSONResponse({"ok": True})
 
     def db() -> sqlite3.Connection:
         return store.connect(db_path)
@@ -135,6 +186,33 @@ def create_app(db_path: Path | str = store.DEFAULT_DB) -> FastAPI:
         finally:
             conn.close()
 
+    @app.get("/validations", response_class=HTMLResponse)
+    def approvals(request: Request) -> HTMLResponse:
+        conn = db()
+        try:
+            return TEMPLATES.TemplateResponse(
+                request,
+                "approvals.html",
+                ctx(
+                    pending=store.pending_approvals(conn),
+                    failures=store.recent_failures(conn, 8),
+                    jobs=[(name, store.last_job_run(conn, name)) for name in _job_names()],
+                ),
+            )
+        finally:
+            conn.close()
+
+    @app.post("/validations/{approval_id}/{verdict}")
+    def decide(approval_id: int, verdict: str) -> Response:
+        if verdict not in ("valider", "refuser"):
+            return Response("Décision inconnue.", status_code=400)
+        conn = db()
+        try:
+            store.decide(conn, approval_id, approve=(verdict == "valider"), by="console")
+        finally:
+            conn.close()
+        return RedirectResponse("/validations", status_code=303)
+
     @app.get("/outils", response_class=HTMLResponse)
     def tools(request: Request) -> HTMLResponse:
         conn = db()
@@ -166,6 +244,31 @@ def create_app(db_path: Path | str = store.DEFAULT_DB) -> FastAPI:
             conn.close()
 
     return app
+
+
+def _authorized(header: str, user: str, password: str) -> bool:
+    scheme, _, encoded = header.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return False
+    try:
+        given_user, _, given_password = base64.b64decode(encoded).decode("utf-8").partition(":")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    # Comparaison à temps constant : la durée ne doit rien révéler du mot de passe.
+    return secrets.compare_digest(given_user, user) & secrets.compare_digest(given_password, password)
+
+
+def _same_origin(request: Request) -> bool:
+    source = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not source:
+        return False
+    return urlparse(source).netloc == request.headers.get("host", "")
+
+
+def _job_names() -> list[str]:
+    from ..autonomy.scheduler import JOBS
+
+    return [j.name for j in JOBS]
 
 
 def _load_core(brand: sqlite3.Row) -> dict | None:
