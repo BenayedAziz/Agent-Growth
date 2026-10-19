@@ -258,6 +258,12 @@ def audit_html(report: dict) -> str:
     """
     from jinja2 import Environment, PackageLoader, select_autoescape
 
+    from urllib.parse import urlparse
+
     env = Environment(loader=PackageLoader("agent_growth", "templates"),
                       autoescape=select_autoescape(["html"]))
+    # Présentation seulement : décimales à la française, et l'adresse d'une
+    # page réduite à son chemin (le domaine est en tête du rapport).
+    env.filters["dec"] = lambda value, digits=1: f"{value:.{digits}f}".replace(".", ",")
+    env.filters["path"] = lambda url: (urlparse(url).path or "/") if url else ""
     return env.get_template("audit_report.html").render(r=report)

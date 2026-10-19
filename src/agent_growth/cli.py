@@ -16,6 +16,7 @@ Les outils d'analyse :
 
     ag audit <url>          audit SEO / GEO complet du site (gratuit, sans IA)
     ag audit-report <dossier>  refaire le rapport après la recherche Google manuelle
+    ag mots-cles <dossier>  mots-clés, concurrents et écart via DataForSEO (≈ 0,20 $)
     ag brand-core <url>     construire la ligne éditoriale de la marque
     ag inspect <url>        voir ce que l'agent lit du site (gratuit, sans IA)
     ag render <json>        régénérer les documents depuis un brand-core.json
@@ -77,7 +78,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 def cmd_audit(args: argparse.Namespace) -> int:
     """Audit SEO / GEO. Règles vérifiables, aucun appel au modèle : gratuit et
     reproductible. Écrit le rapport client dans `--out`."""
-    from . import audit
+    from . import audit, dataforseo, semantics
 
     source = " + export Screaming Frog" if args.screaming_frog else ""
     print(f"Audit de {args.url} (jusqu'à {args.max_pages} pages{source})…", file=sys.stderr)
@@ -106,6 +107,15 @@ def cmd_audit(args: argparse.Namespace) -> int:
     if not manual_path.exists():
         manual_path.write_text(json.dumps(audit.manual_checklist(result.url, brand=args.name or ""),
                                           ensure_ascii=False, indent=2), encoding="utf-8")
+    keywords_path = out / "mots-cles.json"
+    if not keywords_path.exists():
+        keywords_path.write_text(json.dumps(semantics.keyword_template(), ensure_ascii=False, indent=2),
+                                 encoding="utf-8")
+    if dataforseo.available() and not args.no_keywords:
+        try:
+            _fetch_keywords(out, market=args.marche, competitors=args.concurrent)
+        except dataforseo.DataForSEOError as exc:
+            print(f"⚠ {exc} — relancer ensuite : ag mots-cles {out}", file=sys.stderr)
     report = _write_report(out)
 
     c = result.counts
@@ -119,21 +129,66 @@ def cmd_audit(args: argparse.Namespace) -> int:
         print(f"  vitesse {s.strategy:<7} {s.url} : {verdict}")
     print(f"\nRapport : {out / 'rapport.html'}")
     if report["draft"]:
-        print(f"Version de travail : {len(report['pending'])} vérification(s) Google à faire à la main.\n"
-              f"  1. Remplir « status » et « constat » dans {manual_path}\n"
-              f"  2. ag audit-report {out}")
+        print(f"Version de travail : {len(report['pending'])} point(s) à compléter :")
+        for item in report["pending"]:
+            print(f"  · {item['question']}")
+        print(f"Puis : ag audit-report {out}\n"
+              f"(Mots-clés du consultant : {keywords_path} · export Search Console : {out}/search-console.zip)")
     return 0
 
 
 def _write_report(folder: Path) -> dict:
-    from . import audit, render
+    """Refait `rapport.html` à partir de ce que contient le dossier de l'audit :
+    audit.json, recherche-manuelle.json, mots-cles.json, et l'export Search
+    Console s'il y est (search-console.zip ou search-console.csv)."""
+    from . import audit, render, semantics
 
-    data = json.loads((folder / "audit.json").read_text(encoding="utf-8"))
-    manual_path = folder / "recherche-manuelle.json"
-    manual = json.loads(manual_path.read_text(encoding="utf-8")) if manual_path.exists() else None
-    report = audit.report(data, manual, brand=data.get("brand", ""))
+    def read(name: str):
+        path = folder / name
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    data = read("audit.json")
+    market = read("semantique.json")
+    console = next((folder / n for n in ("search-console.zip", "search-console.csv") if (folder / n).exists()), None)
+    report = audit.report(data, read("recherche-manuelle.json"), brand=data.get("brand", ""),
+                          keywords=read("mots-cles.json"),
+                          search_console=semantics.load_search_console(console) if console else None,
+                          market=market)
     (folder / "rapport.html").write_text(render.audit_html(report), encoding="utf-8")
     return report
+
+
+def _fetch_keywords(folder: Path, *, market: str = "fr", competitors: list[str] | None = None) -> dict:
+    """Interroge DataForSEO et écrit `semantique.json` dans le dossier de l'audit."""
+    from . import dataforseo
+
+    data = json.loads((folder / "audit.json").read_text(encoding="utf-8"))
+    path = folder / "mots-cles.json"
+    keywords = [k["mot_cle"].strip() for k in (json.loads(path.read_text(encoding="utf-8")) if path.exists() else [])
+                if k.get("mot_cle", "").strip()]
+    print(f"Mots-clés et concurrents (DataForSEO, marché {market})…", file=sys.stderr)
+    result = dataforseo.analyse(data["url"], keywords, market=market, competitors=competitors)
+    (folder / "semantique.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"  {len(result['ranked'])} mot(s)-clé(s) positionné(s) · {len(result['competitors'])} concurrent(s) · "
+          f"{len(result['gap'])} recherche(s) de concurrents absentes du site · coût {result['cost_usd']} $",
+          file=sys.stderr)
+    return result
+
+
+def cmd_keywords(args: argparse.Namespace) -> int:
+    """(Re)lance l'analyse des mots-clés d'un audit, puis refait le rapport."""
+    from . import dataforseo
+
+    folder = Path(args.folder)
+    if not (folder / "audit.json").exists():
+        print(f"✗ Pas d'audit dans {folder}. Lancer d'abord : ag audit URL", file=sys.stderr)
+        return 1
+    try:
+        _fetch_keywords(folder, market=args.marche, competitors=args.concurrent)
+    except dataforseo.DataForSEOError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+    return cmd_audit_report(args)
 
 
 def cmd_audit_report(args: argparse.Namespace) -> int:
@@ -408,7 +463,18 @@ def build_parser() -> argparse.ArgumentParser:
     aud.add_argument("--screaming-frog", metavar="CSV",
                      help="export « Internal: All » de Screaming Frog, pour un crawl complet")
     aud.add_argument("--no-speed", action="store_true", help="ne pas mesurer la vitesse")
+    aud.add_argument("--marche", default="fr", choices=["fr", "be", "ch", "ca", "ma", "tn", "us", "uk"],
+                     help="pays dont on étudie les recherches Google (défaut : fr)")
+    aud.add_argument("--concurrent", action="append",
+                     help="domaine concurrent à comparer (répétable ; sinon trouvés automatiquement)")
+    aud.add_argument("--no-keywords", action="store_true", help="ne pas interroger DataForSEO")
     aud.set_defaults(func=cmd_audit)
+
+    kw = sub.add_parser("mots-cles", help="mots-clés, concurrents et écart (DataForSEO) d'un audit")
+    kw.add_argument("folder", help="dossier de l'audit (celui qui contient audit.json)")
+    kw.add_argument("--marche", default="fr", choices=["fr", "be", "ch", "ca", "ma", "tn", "us", "uk"])
+    kw.add_argument("--concurrent", action="append", help="domaine concurrent (répétable)")
+    kw.set_defaults(func=cmd_keywords)
 
     rep = sub.add_parser("audit-report", help="refaire le rapport client après la recherche manuelle")
     rep.add_argument("folder", help="dossier de l'audit (celui qui contient audit.json)")

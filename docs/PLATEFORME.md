@@ -273,6 +273,10 @@ Dans l'ordre de probabilité, pas de gravité.
 | **Telegram** : validation en un geste, seul le propriétaire décide | ✅ construit, testé |
 | **Adaptateurs de sites** : WordPress, Shopify, sur mesure (GitHub), manuel (SpeedMedia…) | ✅ construit, testé |
 | **Mise en ligne** : Railway, mot de passe obligatoire, volume persistant | ✅ prêt — [DEPLOIEMENT.md](DEPLOIEMENT.md) |
+| **Audit SEO / GEO présentable au client** : 3 piliers, vitesse, E-E-A-T, sémantique, rapport HTML/PDF | ✅ construit, testé — `ag audit`, ADR-016 |
+| **Mots-clés et concurrents** (DataForSEO, logique d'OpenSEO) | ✅ construit, testé — attend la clé `DATAFORSEO_API_KEY` |
+| **Charte graphique de l'outil** (DA) : couleurs, typographie, logo, ton visuel | ⬜ **à définir** — préalable à l'interface |
+| **L'interface** : espace consultant + espace client, agent intégré, validations | ⬜ à construire sur la charte (remplace la console Jinja et Telegram) |
 | Module 2 — Collecte (les connecteurs) | 🔜 le prochain chantier |
 | Modules 3 à 7 | ⬜ |
 
@@ -302,8 +306,11 @@ ag serve                                     # la console sur http://127.0.0.1:8
 
 ## La prochaine chose à faire
 
-**Module 2 : le premier connecteur en lecture.** L'ordre vient d'ADR-013 — on
-commence par ce qui n'exige aucune revue d'application.
-
-Il manque deux informations : **les adresses de Egyptours et Oria**, et **les
-canaux déjà actifs** sur chacune (Instagram ? Google Ads ? fiche Google ?).
+1. **La charte graphique de l'outil.** Les rapports d'audit sont déjà
+   construits pour la recevoir : toutes leurs couleurs et polices sont des
+   variables en tête de `templates/audit_report.html`. La même charte servira
+   l'interface.
+2. **L'interface** consultant + client, sur cette charte : audits, validations
+   (le client valide ses contenus, le consultant les dépenses), agent intégré.
+3. **Brancher les clés** des audits : `PAGESPEED_API_KEY` (gratuite) et
+   `DATAFORSEO_API_KEY` (à l'usage) — voir [DEPLOIEMENT.md](DEPLOIEMENT.md).

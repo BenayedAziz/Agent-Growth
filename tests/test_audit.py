@@ -11,7 +11,15 @@ import json
 import httpx2
 import pytest
 
-from agent_growth import audit, pagespeed, render, screamingfrog, store
+from agent_growth import (
+    audit,
+    dataforseo,
+    pagespeed,
+    render,
+    screamingfrog,
+    semantics,
+    store,
+)
 
 HOME = """<html lang="fr"><head><title>Banque franco-tunisienne pour particuliers et pros</title>
 <meta name="description" content="Comptes, crédits et transferts entre la France et la Tunisie, en agence ou en ligne.">
@@ -423,13 +431,16 @@ def test_report_is_a_draft_until_the_manual_search_is_done():
     client, _ = fake_site()
     data = audit.run("https://site.fr/", client=client).to_dict()
     report = audit.report(data, brand="Banque Test")
-    assert report["draft"] and len(report["pending"]) == len(audit.manual_checklist("https://site.fr/"))
+    # 6 vérifications Google + l'analyse des mots-clés + la liste du consultant
+    assert report["draft"] and len(report["pending"]) == len(audit.manual_checklist("https://site.fr/")) + 2
 
     manual = audit.manual_checklist("https://site.fr/", brand="Banque Test")
     for m in manual:
         m["status"], m["constat"] = "ok", f"Vérifié : {m['id']}."
     manual[1]["status"], manual[1]["constat"] = "probleme", "Un avis <script>alert(1)</script> négatif sort en 2ᵉ."
     report = audit.report(data, manual, brand="Banque Test")
+    assert report["draft"]                        # sémantique pas encore faite
+    report = audit.report(data, manual, brand="Banque Test", market=MARKET)
     assert not report["draft"]
     eeat = next(p for p in report["pillars"] if p["key"] == "eeat")
     assert any(m["id"] == "requete-marque" and m["status_label"] == "Problème" for m in eeat["manual"])
@@ -447,7 +458,8 @@ def test_report_html_follows_the_three_pillar_structure():
     manual = audit.manual_checklist("https://site.fr/")
     for m in manual:
         m["status"], m["constat"] = "a-ameliorer", "<script>alert(1)</script>"
-    html = render.audit_html(audit.report(data, manual, brand="Banque Test"))
+    html = render.audit_html(audit.report(data, manual, brand="Banque Test", market=MARKET,
+                                          keywords=[{"mot_cle": "compte en devises"}]))
     for meta in audit.PILLARS.values():
         assert meta["subtitle"] in html
     assert "Outils utilisés" in html and "Google PageSpeed Insights" in html
@@ -456,6 +468,9 @@ def test_report_html_follows_the_three_pillar_structure():
     assert "<script>alert(1)</script>" not in html                     # échappé
     assert "Semrush" not in html
     assert "Ce qui est déjà en place" in html and "Vitesse de chargement" in html
+    assert "Les recherches sur lesquelles vous apparaissez" in html
+    assert "Les recherches de vos concurrents où vous n'apparaissez pas" in html
+    assert "Recherche de mots-clés" in html and "compte en devises" in html
 
 
 def test_report_html_warns_when_manual_checks_are_missing():
@@ -485,6 +500,187 @@ def test_cli_rebuilds_the_report_after_manual_search(tmp_path, capsys):
     for m in manual:
         m["status"], m["constat"] = "ok", "Vérifié."
     (tmp_path / "recherche-manuelle.json").write_text(json.dumps(manual), encoding="utf-8")
+    (tmp_path / "semantique.json").write_text(json.dumps(MARKET), encoding="utf-8")
     assert main(["audit-report", str(tmp_path)]) == 0
     assert "Prêt à envoyer" in capsys.readouterr().out
     assert "Outils utilisés" in (tmp_path / "rapport.html").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Sémantique
+# --------------------------------------------------------------------------- #
+
+MARKET = {
+    "market": "fr", "fetched_at": "2026-10-19", "source": "dataforseo", "cost_usd": 0.18,
+    "ranked": [
+        {"keyword": "banque franco tunisienne", "position": 2, "volume": 900, "difficulty": 12,
+         "url": "https://site.fr/", "traffic": 300.0},
+        {"keyword": "crédit logement france", "position": 14, "volume": 1300, "difficulty": 40,
+         "url": "https://site.fr/credit-3/", "traffic": 5.0},
+    ],
+    "competitors": [{"domain": "rivale.fr", "avg_position": 6.1, "keywords": 120, "visibility": 0.2}],
+    "gap": [{"keyword": "transfert d'argent tunisie", "volume": 2400, "competitor": "rivale.fr", "position": 3},
+            {"keyword": "niche introuvable", "volume": 10, "competitor": "rivale.fr", "position": 9}],
+    "overview": {"compte en devises": {"volume": 320, "difficulty": 25, "intent": "commercial", "cpc": 1.2}},
+}
+
+INDEX = [
+    {"url": "https://b.fr/credit-immobilier/", "title": "Crédit immobilier en Tunisie | Banque",
+     "h1": ["Votre crédit immobilier"], "h2": [], "text": "Notre transfert d'argent est simple. " * 4},
+    {"url": "https://b.fr/credit-immo-2/", "title": "Crédit immobilier en Tunisie", "h1": [], "h2": [], "text": ""},
+]
+
+
+def test_keyword_coverage_statuses_and_cannibalisation():
+    rows = {r["keyword"]: r for r in semantics.coverage(
+        [{"mot_cle": "crédit immobilier Tunisie"}, {"mot_cle": "transfert d'argent"},
+         {"mot_cle": "compte en devises"}, {"mot_cle": ""}], INDEX)}
+    assert rows["crédit immobilier Tunisie"]["status"] == "cible"
+    assert rows["crédit immobilier Tunisie"]["competing"] == ["https://b.fr/credit-immo-2/"]
+    assert rows["transfert d'argent"]["status"] == "mentionne"
+    assert rows["compte en devises"]["status"] == "absent"
+    assert "" not in rows
+
+
+def test_footprint_keeps_expressions_as_written():
+    fp = semantics.footprint(INDEX)[0]
+    assert fp["main"] == "Votre crédit immobilier"
+    assert "transfert d'argent" in fp["terms"]
+
+
+def test_keywords_are_enriched_search_console_first():
+    rows = semantics.coverage([{"mot_cle": "crédit logement France", "position": 30},
+                               {"mot_cle": "compte en devises"}, {"mot_cle": "prêt étudiant", "position": 7}], INDEX)
+    queries = [{"query": "credit logement france", "clicks": 3, "impressions": 400, "ctr": 0.7, "position": 11.4}]
+    out = {r["keyword"]: r for r in semantics.enrich(rows, queries=queries, market=MARKET)}
+    assert out["crédit logement France"]["position"] == 11.4
+    assert out["crédit logement France"]["source"] == "search-console"
+    assert out["compte en devises"]["volume"] == 320 and out["compte en devises"]["position"] is None
+    manual = semantics.enrich(semantics.coverage([{"mot_cle": "prêt étudiant", "position": 7}], INDEX))
+    assert manual[0]["source"] == "recherche manuelle"
+
+
+def test_near_first_page_uses_search_console_or_dataforseo():
+    queries = [{"query": "a", "position": 9, "impressions": 50}, {"query": "b", "position": 3, "impressions": 900},
+               {"query": "c", "position": 12, "impressions": 5}]
+    assert semantics.near_first_page(queries) == ["a"]
+    assert semantics.near_first_page([], MARKET["ranked"]) == ["crédit logement france"]
+
+
+def test_search_console_export_is_read_from_the_zip(tmp_path):
+    import zipfile
+
+    csv_text = ("Requêtes les plus fréquentes,Clics,Impressions,CTR,Position\n"
+                "banque tunisienne paris,12,340,\"3,53 %\",\"6,2\"\n"
+                "crédit sayafi,1,1 200,\"0,08 %\",\"14,9\"\n")
+    with zipfile.ZipFile(tmp_path / "sc.zip", "w") as z:
+        z.writestr("Requêtes.csv", csv_text)
+        z.writestr("Pages.csv", "x")
+    rows = semantics.load_search_console(tmp_path / "sc.zip")
+    assert rows[0] == {"query": "banque tunisienne paris", "clicks": 12.0, "impressions": 340.0,
+                       "ctr": 3.53, "position": 6.2}
+    assert rows[1]["impressions"] == 1200.0
+    with pytest.raises(ValueError, match="Requêtes"):
+        (tmp_path / "bad.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        semantics.load_search_console(tmp_path / "bad.csv")
+
+
+def test_semantic_findings_land_in_the_on_page_pillar():
+    rows = semantics.coverage([{"mot_cle": "compte en devises"}, {"mot_cle": "crédit immobilier Tunisie"}], INDEX)
+    evaluated = set()
+    found = {f.code: f for f in audit.semantic_checks(rows, [], evaluated, MARKET)}
+    assert found["mots-cles-absents"].urls == ["compte en devises"]
+    assert found["cannibalisation"].urls == ["https://b.fr/credit-immobilier/", "https://b.fr/credit-immo-2/"]
+    assert found["mots-cles-concurrents"].urls == ["transfert d'argent tunisie"]   # 10 recherches : écarté
+    assert found["requetes-page-2"].urls == ["crédit logement france"]
+    assert all(f.pillar == "on-page" for f in found.values())
+    assert {"mots-cles", "cannibalisation", "page-2", "concurrents"} <= evaluated
+
+
+# --------------------------------------------------------------------------- #
+# DataForSEO (fausse API)
+# --------------------------------------------------------------------------- #
+
+def fake_dataforseo(status=200, task_status=20000):
+    sent = []
+
+    def ranked(target):
+        rows = {
+            "site.fr": [("banque franco tunisienne", 2, 900), ("crédit logement france", 14, 1300)],
+            "rivale.fr": [("transfert d'argent tunisie", 3, 2400), ("Banque franco-tunisienne", 1, 900)],
+            "autre.fr": [("transfert argent tunisie", 7, 2400), ("compte en dinars", 5, 480)],
+        }[target]
+        return [{"keyword_data": {"keyword": k, "keyword_info": {"search_volume": v},
+                                  "keyword_properties": {"keyword_difficulty": 20}},
+                 "ranked_serp_element": {"serp_item": {"url": f"https://{target}/x", "rank_group": p,
+                                                       "rank_absolute": p + 2, "etv": 1.5}}}
+                for k, p, v in rows]
+
+    def handler(request):
+        body = json.loads(request.content)[0]
+        sent.append((request.url.path, body, request.headers.get("authorization")))
+        if status != 200:
+            return httpx2.Response(status, json={})
+        path = request.url.path
+        if path.endswith("ranked_keywords/live"):
+            items = ranked(body["target"])
+        elif path.endswith("serp_competitors/live"):
+            items = [{"domain": "site.fr", "keywords_count": 50}, {"domain": "fr.wikipedia.org", "keywords_count": 40},
+                     {"domain": "rivale.fr", "avg_position": 4.2, "keywords_count": 30, "visibility": 0.3},
+                     {"domain": "autre.fr", "keywords_count": 10}]
+        elif path.endswith("keyword_overview/live"):
+            items = [{"keyword": k, "keyword_info": {"search_volume": 320, "cpc": 1.1},
+                      "keyword_properties": {"keyword_difficulty": 25},
+                      "search_intent_info": {"main_intent": "commercial"}} for k in body["keywords"]]
+        else:
+            items = []
+        return httpx2.Response(200, json={"status_code": 20000, "tasks": [{
+            "status_code": task_status, "status_message": "Ok." if task_status == 20000 else "Invalid Field",
+            "cost": 0.0124, "result": [{"items": items, "total_count": len(items)}]}]})
+
+    return httpx2.Client(transport=httpx2.MockTransport(handler)), sent
+
+
+def test_dataforseo_analysis_finds_rankings_competitors_and_gap():
+    http, sent = fake_dataforseo()
+    client = dataforseo.Client("Y2xlOnNlY3JldA==", http=http)
+    result = dataforseo.analyse("https://www.site.fr/", ["compte en devises"], market="fr", client=client)
+    assert [r["keyword"] for r in result["ranked"]] == ["banque franco tunisienne", "crédit logement france"]
+    assert result["ranked"][0]["position"] == 2                       # position organique, pas absolue
+    assert [c["domain"] for c in result["competitors"]] == ["rivale.fr", "autre.fr"]   # ni soi, ni Wikipédia
+    gap = {g["keyword"]: g for g in result["gap"]}
+    assert "Banque franco-tunisienne" not in gap                      # déjà positionné, à la ponctuation près
+    assert gap["transfert d'argent tunisie"]["position"] == 3         # meilleur concurrent retenu
+    assert [k for k in gap if "transfert" in k] == ["transfert d'argent tunisie"]   # une seule fois
+    assert result["overview"]["compte en devises"]["volume"] == 320
+    assert result["cost_usd"] == round(0.0124 * len(sent), 4)
+    _, body, auth = sent[0]
+    assert auth == "Basic Y2xlOnNlY3JldA=="
+    assert body["target"] == "site.fr" and body["location_code"] == 2250 and body["language_code"] == "fr"
+
+
+def test_dataforseo_errors_are_explained():
+    with pytest.raises(dataforseo.DataForSEOError, match="DATAFORSEO_API_KEY"):
+        dataforseo.Client("")
+    for status, message in ((401, "refuse la clé"), (402, "Crédit DataForSEO épuisé")):
+        http, _ = fake_dataforseo(status=status)
+        with pytest.raises(dataforseo.DataForSEOError, match=message):
+            dataforseo.Client("k", http=http).ranked_keywords("site.fr")
+    http, _ = fake_dataforseo(task_status=40501)
+    with pytest.raises(dataforseo.DataForSEOError, match="Invalid Field"):
+        dataforseo.Client("k", http=http).ranked_keywords("site.fr")
+
+
+def test_given_competitors_are_used_as_is():
+    http, sent = fake_dataforseo()
+    result = dataforseo.analyse("site.fr", [], competitors=["https://www.autre.fr/"],
+                                client=dataforseo.Client("k", http=http))
+    assert [c["domain"] for c in result["competitors"]] == ["autre.fr"]
+    assert not any(path.endswith("serp_competitors/live") for path, _, _ in sent)
+    assert not any(path.endswith("keyword_overview/live") for path, _, _ in sent)
+
+
+def test_report_shows_how_to_get_keyword_data_when_missing():
+    client, _ = fake_site()
+    report = audit.report(audit.run("https://site.fr/", client=client).to_dict())
+    assert any("DataForSEO" in p["question"] for p in report["pending"])

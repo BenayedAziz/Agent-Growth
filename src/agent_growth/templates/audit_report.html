@@ -71,7 +71,7 @@ a { color: var(--accent); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 12px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
-td.url { word-break: break-all; max-width: 260px; }
+td.url { word-break: break-word; max-width: 240px; }
 .legend { font-size: 12px; color: var(--muted); }
 .tools { display: grid; gap: 12px; }
 .tool { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -209,14 +209,14 @@ footer { text-align: center; font-size: 12px; color: var(--muted); }
     <tr><th>Page</th><th>Appareil</th><th>Note</th><th>Contenu affiché</th><th>Stabilité</th><th>Blocage</th><th>Visiteurs réels</th></tr>
     {% for s in p.speed %}
     <tr>
-      <td class="url">{{ s.url }}</td>
+      <td class="url">{{ s.url|path }}</td>
       <td>{{ 'Mobile' if s.strategy == 'mobile' else 'Ordinateur' }}</td>
       {% if s.error %}
       <td colspan="5" class="muted">Mesure à relancer : {{ s.error }}</td>
       {% else %}
       <td class="{{ tone(s.score or 0) }}"><b>{{ s.score }}</b></td>
-      <td>{{ '%.1f'|format(s.lcp_ms / 1000) if s.lcp_ms is not none else '—' }} s</td>
-      <td>{{ '%.2f'|format(s.cls) if s.cls is not none else '—' }}</td>
+      <td>{{ (s.lcp_ms / 1000)|dec if s.lcp_ms is not none else '—' }} s</td>
+      <td>{{ s.cls|dec(2) if s.cls is not none else '—' }}</td>
       <td>{{ s.tbt_ms|round|int if s.tbt_ms is not none else '—' }} ms</td>
       <td>{% if s.field_data %}{{ 'Validés' if s.field_data.category == 'FAST' else 'Non validés' }}{% if s.field_scope == 'site' %} (site entier){% endif %}{% else %}—{% endif %}</td>
       {% endif %}
@@ -231,7 +231,78 @@ footer { text-align: center; font-size: 12px; color: var(--muted); }
   {% set opps = p.speed|selectattr('opportunities')|list %}
   {% if opps %}
   <p><b>Pistes d'accélération chiffrées par Google</b> (accueil, mobile) :</p>
-  <ul>{% for o in opps[0].opportunities %}<li>{{ o.title }} — environ {{ '%.1f'|format(o.savings_ms / 1000) }} s gagnées</li>{% endfor %}</ul>
+  <ul>{% for o in opps[0].opportunities %}<li>{{ o.title }} — environ {{ (o.savings_ms / 1000)|dec }} s gagnées</li>{% endfor %}</ul>
+  {% endif %}
+  {% endif %}
+
+  {% if p.semantic %}{% set sem = p.semantic %}
+  <h3 style="margin-top:20px">Sémantique : les mots-clés</h3>
+  {% if sem.keywords %}
+  <p class="muted">Les recherches que tapent vos clients, et la page de votre site qui y répond.</p>
+  <table>
+    <tr><th>Mot-clé</th><th>Sur le site</th><th>Page</th><th>Position Google</th>{% if sem.has_search_console %}<th>Affichages</th>{% endif %}{% if sem.has_volume %}<th>Recherches / mois</th>{% endif %}</tr>
+    {% for k in sem.keywords %}
+    <tr>
+      <td><b>{{ k.keyword }}</b></td>
+      <td class="{{ 'good' if k.status == 'cible' else 'mid' if k.status == 'mentionne' else 'bad' }}">
+        {{ 'Page dédiée' if k.status == 'cible' else 'Cité en passant' if k.status == 'mentionne' else 'Absent' }}{% if k.competing %} · {{ k.competing|length + 1 }} pages en concurrence{% endif %}</td>
+      <td class="url">{{ k.page|path or '—' }}</td>
+      <td>{% if k.position is not none %}{{ k.position }}{% if k.source == 'recherche manuelle' %} <span class="muted">(relevée)</span>{% endif %}{% elif k.source %}<span class="bad">absent du top 100</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      {% if sem.has_search_console %}<td>{{ k.impressions if k.impressions is defined else '—' }}</td>{% endif %}
+      {% if sem.has_volume %}<td>{{ k.volume if k.volume is not none else '—' }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="legend"><b>Page dédiée</b> : le mot-clé est dans le titre ou le titre principal d'une page — Google sait laquelle montrer.
+    <b>Cité en passant</b> : il apparaît dans un texte, sans page qui en fasse son sujet. <b>Absent</b> : le site n'en parle pas.
+    {% if sem.has_search_console %}<b>Affichages</b> : nombre de fois où Google a montré le site sur cette recherche (Search Console, 3 mois).{% endif %}</p>
+  {% endif %}
+
+  {% if sem.has_market %}
+  <h3 style="margin-top:20px">Les recherches sur lesquelles vous apparaissez</h3>
+  {% if sem.ranked %}
+  <p class="muted">{{ sem.ranked_total }} recherche(s) où le site sort dans les 100 premiers résultats de Google — les plus cherchées :</p>
+  <table>
+    <tr><th>Recherche</th><th>Position</th><th>Recherches / mois</th><th>Page qui sort</th></tr>
+    {% for k in sem.ranked %}<tr><td>{{ k.keyword }}</td>
+      <td class="{{ 'good' if k.position and k.position <= 3 else 'mid' if k.position and k.position <= 10 else 'bad' }}"><b>{{ k.position or '—' }}</b></td>
+      <td>{{ k.volume if k.volume is not none else '—' }}</td><td class="url">{{ k.url|path }}</td></tr>{% endfor %}
+  </table>
+  <p class="legend">Position 1 à 3 : l'essentiel des clics. 4 à 10 : première page. Au-delà : presque personne ne voit le site.</p>
+  {% else %}
+  <p class="bad">Google ne montre le site dans les 100 premiers résultats d'aucune recherche suivie : aujourd'hui, personne ne le trouve sans connaître son nom.</p>
+  {% endif %}
+
+  {% if sem.gap %}
+  <h3 style="margin-top:20px">Les recherches de vos concurrents où vous n'apparaissez pas</h3>
+  <table>
+    <tr><th>Recherche</th><th>Recherches / mois</th><th>Concurrent qui sort</th><th>Sa position</th></tr>
+    {% for g in sem.gap %}<tr><td>{{ g.keyword }}</td><td>{{ g.volume if g.volume is not none else '—' }}</td><td>{{ g.competitor }}</td><td>{{ g.position }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+
+  {% if sem.competitors %}
+  <p><b>Concurrents analysés sur Google :</b>
+    {% for c in sem.competitors %}{{ c.domain }}{% if c.keywords %} ({{ c.keywords }} recherches en commun){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+  {% endif %}
+  {% endif %}
+
+  {% if sem.queries %}
+  <h3 style="margin-top:20px">Les recherches qui vous amènent déjà</h3>
+  <table>
+    <tr><th>Recherche</th><th>Clics</th><th>Affichages</th><th>Position moyenne</th></tr>
+    {% for q in sem.queries %}<tr><td>{{ q.query }}</td><td>{{ q.clicks|int }}</td><td>{{ q.impressions|int }}</td><td>{{ q.position|dec }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+
+  {% if sem.footprint|selectattr('terms')|list %}
+  <h3 style="margin-top:20px">Ce que chaque page dit à Google</h3>
+  <table>
+    <tr><th>Page</th><th>Sujet affiché (titre principal)</th><th>Expressions les plus présentes</th></tr>
+    {% for f in sem.footprint if f.terms %}<tr><td class="url">{{ f.url|path }}</td><td>{{ f.main or '—' }}</td><td>{{ f.terms|join(', ') }}</td></tr>{% endfor %}
+  </table>
+  <p class="legend">Une page qui répète des expressions sans rapport avec son titre envoie un signal confus.
+    Une expression qui n'apparaît sur aucune page ne peut pas être trouvée.</p>
   {% endif %}
   {% endif %}
 
@@ -253,7 +324,7 @@ footer { text-align: center; font-size: 12px; color: var(--muted); }
   <p class="muted">Dans l'ordre. Ce qui est critique se règle souvent en quelques heures, et c'est là que se perdent des clients aujourd'hui.</p>
   {% if r.plan %}
   <table>
-    <tr><th>Quand</th><th>Action</th><th>Pilier</th><th>Pages</th></tr>
+    <tr><th>Quand</th><th>Action</th><th>Pilier</th><th>Concernés</th></tr>
     {% for a in r.plan %}<tr><td>{{ a.horizon }}</td><td>{{ a.title }}</td><td>{{ a.pillar }}</td><td>{{ a.pages }}</td></tr>{% endfor %}
   </table>
   {% else %}<p>Rien d'urgent : le travail porte sur le contenu et la visibilité.</p>{% endif %}
@@ -268,7 +339,7 @@ footer { text-align: center; font-size: 12px; color: var(--muted); }
   </div>
   <p class="legend" style="margin-top:16px">Méthode : chaque constat automatique est une règle vérifiable appliquée à ce qui a été
     réellement lu sur le site, sans intelligence artificielle. Relancé sur un site inchangé, l'audit donne le même résultat.
-    La note est calculée sur ces constats ; la recherche manuelle l'éclaire sans la modifier.</p>
+    La note est calculée sur ces constats et sur l'analyse des mots-clés ; la recherche manuelle l'éclaire sans la modifier.</p>
 </section>
 
 <footer>Audit du {{ r.date }} · {{ r.url }}</footer>

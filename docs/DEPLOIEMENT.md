@@ -149,6 +149,63 @@ Dans la minute, Telegram te montre la demande avec **Valider / Refuser**.
 Valide : dans les 5 minutes, la page est créée (en brouillon) ou le dossier est
 prêt, et Telegram te le confirme.
 
+## Les audits SEO / GEO
+
+```bash
+ag audit https://site.fr --name "Nom de la marque"     # crawl, vitesse, mots-clés, rapport
+ag mots-cles brands/site.fr/audit --concurrent rival.fr  # relancer la partie mots-clés
+ag audit-report brands/site.fr/audit                     # refaire le rapport après les vérifications manuelles
+```
+
+Le rapport est `brands/<domaine>/audit/rapport.html` — il s'ouvre dans un
+navigateur et s'imprime en PDF (Ctrl+P). Tant que la recherche Google manuelle
+et les mots-clés ne sont pas faits, il porte « version de travail » en tête.
+
+### Vitesse : la clé PageSpeed Insights (gratuite, 5 minutes)
+
+Sans clé, Google refuse la plupart des mesures : le quota commun à tous les
+utilisateurs sans clé est épuisé. Le système retombe alors sur Lighthouse
+(installé dans l'image), qui donne la même note mais pas les données des
+visiteurs réels. Avec la clé, on a les deux.
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → créer un
+   projet « Agent Growth ».
+2. **API et services → Bibliothèque** → « PageSpeed Insights API » → **Activer**.
+3. **API et services → Identifiants → Créer des identifiants → Clé API**.
+4. Sur la clé : **Restreindre la clé** → API PageSpeed Insights uniquement.
+5. Railway : variable **`PAGESPEED_API_KEY`**.
+
+### Mots-clés : la clé DataForSEO (à l'usage, ≈ 0,20 $ par audit)
+
+C'est la source de données qu'utilisent les outils comme OpenSEO : volumes de
+recherche (Google Ads), positions dans Google, concurrents. Pas d'abonnement.
+
+1. Créer un compte sur [dataforseo.com](https://app.dataforseo.com/register)
+   (1 $ offert pour tester ; recharge minimale de 50 $, selon OpenSEO).
+2. **API Access** → « Send by email » → copier les identifiants **Base64**.
+3. Railway : variable **`DATAFORSEO_API_KEY`**.
+
+Le marché étudié se choisit avec `--marche` : `fr` (défaut), `be`, `ch`, `ca`,
+`ma`, `tn`, `us`, `uk`.
+
+### Search Console (quand le client donne l'accès)
+
+Search Console → **Performances** → **Exporter** → **Télécharger le CSV**. Poser
+le zip dans le dossier de l'audit sous le nom `search-console.zip`, puis
+`ag audit-report`. Les positions de la Search Console priment sur toute autre.
+
+### Screaming Frog (crawl complet d'un gros site)
+
+Notre robot lit 40 pages par défaut (`--max-pages` pour plus). Pour un site
+entier : lancer le crawl dans Screaming Frog, onglet **Internal**, filtre
+**All**, **Export** en CSV — l'interface en anglais. Puis :
+
+```bash
+ag audit https://site.fr --screaming-frog internal_all.csv
+```
+
+Version gratuite : 500 adresses. Au-delà, licence payante.
+
 ## La validation automatique, plus tard
 
 Quand un canal a fait ses preuves, on active la validation automatique pour ce

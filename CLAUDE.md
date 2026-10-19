@@ -80,6 +80,12 @@ Les deux conclusions qui commandent le code :
 | `src/agent_growth/llm.py` | **Seul** point d'accès à Claude. Modèle, effort, refus : ici et nulle part ailleurs. |
 | `src/agent_growth/crawl.py` | Lecture des sites. Respecte `robots.txt`. En-têtes HTTP en ASCII strict. |
 | `src/agent_growth/render.py` | JSON → documents lisibles. Aucune logique métier. |
+| `src/agent_growth/audit.py` | Audit SEO / GEO : règles vérifiables rangées en 3 piliers (Technique, On-Page, E-E-A-T). Toute règle est déclarée dans `CHECKS`, avec ce qu'on écrit quand elle passe. Aucun appel au modèle. |
+| `src/agent_growth/pagespeed.py` | Vitesse : API PageSpeed Insights, Lighthouse en secours. Jamais de « non mesuré ». |
+| `src/agent_growth/semantics.py` | Mots-clés : ce que dit chaque page, couverture de la liste du consultant, export Search Console. |
+| `src/agent_growth/dataforseo.py` | Volumes, positions, concurrents (DataForSEO, logique reprise d'OpenSEO — `THIRD_PARTY_NOTICES.md`). Pas de scraping de Google. |
+| `src/agent_growth/screamingfrog.py` | Import de l'export « Internal: All » de Screaming Frog. |
+| `src/agent_growth/templates/` | Rapports clients. Couleurs et polices en variables CSS : la charte graphique de l'outil les remplacera. |
 | `src/agent_growth/schema.sql` | Les 13 tables de la console. Une colonne ajoutée après coup va aussi dans `_ADDED_COLUMNS` de `store.py`, sinon la base de production casse. |
 | `src/agent_growth/store.py` | Seul accès à la base. **Aucun secret n'y entre** : `secret_ref` est un nom de variable, jamais une valeur. |
 | `src/agent_growth/console/` | Les écrans. Rendu serveur, Jinja. Starlette 1.6 exige `TemplateResponse(request, nom, contexte)`. Mot de passe obligatoire en ligne, contrôle d'origine sur tout POST. |

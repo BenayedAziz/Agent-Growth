@@ -527,3 +527,54 @@ pull request GitHub (jamais d'écriture sur la branche principale), et mode
 manuel pour les plateformes fermées — SpeedMedia, CMS des agences de voyage,
 n'a pas d'API d'écriture publique connue. Sans accès configuré, toute
 plateforme retombe en mode manuel plutôt qu'en écriture à l'aveugle.
+
+## ADR-016 — Les audits : trois piliers, des sources sans abonnement
+
+*2026-10-19 · adopté*
+
+**Demande.** Des audits présentables au client tout de suite, rangés comme
+le fondateur les présente : **Technique** (ce qui permet à Google de lire,
+comprendre et indexer le site), **On-Page** (ce qui signale à Google de quoi
+parle chaque page), **E-E-A-T** (ce qui établit la crédibilité du site), puis
+**Outils utilisés**. Pas de Semrush. Avec la sémantique : sur quels mots-clés
+le site apparaît, et sur lesquels il n'apparaît pas.
+
+**Décision.**
+
+- **Les constats restent des règles vérifiables**, sans modèle de langage :
+  un audit relancé sur un site inchangé dit la même chose. Chaque règle
+  appartient à un pilier et dit ce qu'on écrit quand elle passe — le rapport
+  montre aussi ce qui est acquis.
+- **Une note par pilier, la note globale est leur moyenne.** La première
+  version donnait une note globale plus basse que les trois piliers : un
+  chiffre que le client ne peut pas recalculer est un chiffre qu'il ne croit pas.
+- **Crawl** : notre robot (40 pages par défaut), ou l'export « Internal: All »
+  de **Screaming Frog** pour un site entier — importé, pas réécrit. Version
+  gratuite limitée à 500 adresses ; licence à 199 £/an (tarif officiel relevé
+  le 2026-10-19). Les possibilités exactes de la version gratuite en ligne de
+  commande sont contradictoires selon les sources : on s'appuie sur l'export CSV,
+  qui marche dans tous les cas.
+- **Vitesse** : l'API **PageSpeed Insights** avec une clé gratuite. Sans clé, le
+  quota commun est épuisé (constaté : 429). En secours, **Lighthouse** — le
+  moteur de PageSpeed — lancé sur place : jamais de « non mesuré » dans un
+  rapport. La source est écrite dans le rapport.
+- **Mots-clés : DataForSEO**, la source de données d'**OpenSEO** (MIT), dont on
+  reprend la logique d'appels en Python (THIRD_PARTY_NOTICES.md). Environ
+  0,20 $ par audit, à l'usage. **Pas de scraping de Google** : Google bloque un
+  serveur qui l'interroge en série, ses conditions l'interdisent, et les
+  volumes de recherche ne figurent dans aucune page de résultats. On reprend
+  la logique d'OpenSEO, pas son interface : la nôtre aura sa propre charte.
+- **Search Console** quand le client nous donne l'accès : les vraies recherches
+  qui amènent du monde, qui priment sur toute estimation.
+- **Recherche Google manuelle** : six vérifications qu'un humain fait mieux
+  qu'une machine (pages indexées, recherche sur la marque, fiche Google, avis,
+  recherche métier, recommandations des IA). Un quart d'heure.
+- **Le rapport reste « version de travail »** — y compris à l'impression — tant
+  que la recherche manuelle et l'analyse des mots-clés ne sont pas faites. Il ne
+  peut pas partir incomplet par erreur.
+
+**Règles spécifiques aux secteurs sensibles.** Santé et argent sont ce que
+Google appelle « YMYL » : le rapport le dit. Sur un site financier, les pages de
+crédit à la consommation sont vérifiées pour la mention légale exacte
+(art. L312-5 du Code de la consommation) ; une paraphrase ne passe pas.
+

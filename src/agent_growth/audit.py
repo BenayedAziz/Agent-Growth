@@ -35,7 +35,7 @@ from urllib.parse import quote_plus, urlparse
 
 import httpx2 as httpx
 
-from . import pagespeed
+from . import pagespeed, semantics
 from .crawl import SKIP_PATTERNS, USER_AGENT, Page, _rank_links, _robots, fetch_page
 
 Severity = Literal["critique", "important", "amelioration"]
@@ -100,6 +100,12 @@ CHECKS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "partage": ("on-page", "Aperçu prévu pour les partages (Open Graph)", ("og-absent",)),
     "images": ("on-page", "Images décrites par un texte alternatif", ("images-sans-alt",)),
     "reponses": ("on-page", "Réponses structurées (FAQ…) que les IA peuvent citer", ("geo-pas-de-reponses",)),
+    "mots-cles": ("on-page", "Chaque mot-clé étudié a une page qui le cible",
+                  ("mots-cles-absents", "mots-cles-non-cibles")),
+    "cannibalisation": ("on-page", "Aucun mot-clé n'est disputé par deux pages", ("cannibalisation",)),
+    "page-2": ("on-page", "Aucune recherche importante bloquée en page 2 de Google", ("requetes-page-2",)),
+    "concurrents": ("on-page", "Aucune recherche importante où seuls les concurrents apparaissent",
+                    ("mots-cles-concurrents",)),
     # E-E-A-T
     "brouillons": ("eeat", "Aucune page brouillon en ligne", ("page-brouillon",)),
     "entreprise": ("eeat", "L'entreprise est décrite aux machines (données structurées)",
@@ -164,6 +170,7 @@ class AuditResult:
     sector: str = ""
     crawler: str = "agent-growth"       # ou "screaming-frog"
     pages_crawled: int = 0              # pages lues par le crawler retenu
+    index: list[dict] = field(default_factory=list)   # pour la sémantique
     created_at: str = field(default_factory=lambda: date.today().isoformat())
 
     @property
@@ -182,6 +189,7 @@ class AuditResult:
             "evaluated": sorted(self.evaluated),
             "findings": [f.to_dict() for f in self.findings],
             "speed": [s.to_dict() for s in self.speed],
+            "index": self.index,
         }
 
 
@@ -774,10 +782,62 @@ def run(url: str, *, max_pages: int = 40, client: httpx.Client | None = None,
             client.close()
     order = {"critique": 0, "important": 1, "amelioration": 2}
     findings.sort(key=lambda f: (order[f.severity], -len(f.urls)))
+    known = {p.url for p in pages}
+    index = semantics.page_index([*pages, *(p for p in sf_pages if p.url not in known)])
     return AuditResult(url=url, pages=pages, findings=findings, score=score(findings),
                        evaluated=evaluated, speed=speeds, sector=found_sector,
                        crawler="screaming-frog" if sf_pages else "agent-growth",
-                       pages_crawled=len(sf_pages) or len(pages))
+                       pages_crawled=len(sf_pages) or len(pages), index=index)
+
+
+# --------------------------------------------------------------------------- #
+# Sémantique
+# --------------------------------------------------------------------------- #
+
+def semantic_checks(rows: list[dict], queries: list[dict], evaluated: set[str],
+                    market: dict | None = None) -> list[Finding]:
+    """Constats tirés des mots-clés étudiés et de la Search Console. Les
+    « adresses » d'un constat sont ici des mots-clés : c'est ce que le client
+    doit lire."""
+    findings: list[Finding] = []
+
+    def add(code, severity, title, why, fix, items):
+        evaluated.add(CHECK_OF[code])
+        if items:
+            findings.append(Finding(code, severity, "contenu", title, why, fix, list(dict.fromkeys(items))))
+
+    if rows:
+        add("mots-cles-absents", "important", "Des recherches liées à votre offre sans aucune page",
+            "Ces recherches correspondent à ce que vous vendez, et le site n'en parle nulle part. Sur "
+            "elles, Google ne peut montrer que les concurrents.",
+            "Créer une page (ou une section d'une page d'offre) par sujet, titrée avec les mots du client.",
+            [r["keyword"] for r in rows if r["status"] == "absent"])
+        add("mots-cles-non-cibles", "amelioration", "Des mots-clés cités en passant, sans page dédiée",
+            "Le site en parle dans un paragraphe, mais aucune page n'en fait son sujet : Google hésite "
+            "à la montrer, et la classe loin.",
+            "Reprendre le mot-clé dans le titre et le H1 de la page la plus proche, ou lui créer sa page.",
+            [r["keyword"] for r in rows if r["status"] == "mentionne"])
+        add("cannibalisation", "important", "Plusieurs pages se disputent le même mot-clé",
+            "Deux pages titrées sur la même recherche se concurrencent : Google alterne entre elles "
+            "et n'en classe bien aucune.",
+            "Garder une page par mot-clé, fusionner ou rediriger (301) les autres, ou les réorienter.",
+            [u for r in rows if r["competing"] for u in [r["page"], *r["competing"]]])
+    if queries or market:
+        add("requetes-page-2", "amelioration", "Des recherches juste aux portes de la première page",
+            "Sur ces recherches, Google montre déjà le site, mais en page 2 (positions 8 à 20) : "
+            "presque personne n'y clique. C'est le gain le plus rapide du référencement.",
+            "Renforcer la page qui sort sur chacune : titre plus précis, texte plus complet, liens "
+            "depuis les autres pages du site.",
+            semantics.near_first_page(queries, (market or {}).get("ranked")))
+    if market and market.get("competitors"):
+        add("mots-cles-concurrents", "important", "Des recherches où vos concurrents sortent, et pas vous",
+            "Vos concurrents apparaissent dans les 20 premiers résultats de Google sur ces recherches, "
+            "cherchées chaque mois ; votre site n'y apparaît pas du tout. Ce sont des clients qui ne "
+            "vous voient jamais.",
+            "Choisir dans la liste les recherches qui correspondent à votre offre, et leur consacrer "
+            "une page ou une section — titrée avec les mots exacts du client.",
+            [g["keyword"] for g in market.get("gap", []) if (g["volume"] or 0) >= 30][:15])
+    return findings
 
 
 # --------------------------------------------------------------------------- #
@@ -846,7 +906,9 @@ SEVERITY_LABEL = {"critique": "Critique", "important": "Important", "amelioratio
 HORIZON = {"critique": "Cette semaine", "important": "Ce mois-ci", "amelioration": "Ensuite"}
 
 
-def report(data: dict, manual: list[dict] | None = None, *, brand: str = "") -> dict:
+def report(data: dict, manual: list[dict] | None = None, *, brand: str = "",
+           keywords: list[dict] | None = None, search_console: list[dict] | None = None,
+           market: dict | None = None) -> dict:
     """Met en forme un audit (`AuditResult.to_dict()`) pour le rapport client.
 
     Le rapport n'est « prêt à envoyer » que si chaque vérification manuelle a été
@@ -858,6 +920,41 @@ def report(data: dict, manual: list[dict] | None = None, *, brand: str = "") -> 
     manual = manual if manual is not None else manual_checklist(data["url"], brand=brand)
     done = [m for m in manual if m.get("status") in MANUAL_STATUS and m.get("constat", "").strip()]
     pending = [m for m in manual if m not in done]
+
+    # Sémantique : recalculée à chaque rapport, la liste de mots-clés évolue.
+    index = data.get("index", [])
+    keywords = [k for k in (keywords or []) if k.get("mot_cle", "").strip()]
+    queries = search_console or []
+    rows = semantics.enrich(semantics.coverage(keywords, index), queries=queries, market=market)
+    findings += semantic_checks(rows, queries, evaluated, market)
+    order = {"critique": 0, "important": 1, "amelioration": 2}
+    findings.sort(key=lambda f: (order[f.severity], -len(f.urls)))
+    if market is None:
+        pending.append({"question": "Lancer l'analyse des mots-clés et des concurrents (DataForSEO) : "
+                                    "ag mots-cles <dossier de l'audit>",
+                        "links": [{"label": "Créer un compte DataForSEO",
+                                   "url": "https://app.dataforseo.com/register"}]})
+    if not keywords and market is None:
+        pending.append({"question": "Établir la liste des mots-clés que tapent les clients (mots-cles.json)",
+                        "links": [{"label": "Google", "url": "https://www.google.com/"},
+                                  {"label": "Keyword Planner", "url": "https://ads.google.com/aw/keywordplanner/home"}]})
+    unchecked = [k["mot_cle"] for k in keywords if not k.get("valide", True)]
+    if unchecked:
+        pending.append({"question": f"Valider les {len(unchecked)} mots-clés proposés (mettre « valide » à true) "
+                                    "et relever leur position dans Google",
+                        "links": [{"label": k, "url": _google(k)} for k in unchecked[:12]]})
+    semantic = {
+        "keywords": rows,
+        "footprint": semantics.footprint(index)[:20],
+        "queries": queries[:15],
+        "has_search_console": bool(queries),
+        "has_volume": any(r.get("volume") for r in rows),
+        "ranked": (market or {}).get("ranked", [])[:20],
+        "ranked_total": len((market or {}).get("ranked", [])),
+        "gap": (market or {}).get("gap", [])[:20],
+        "competitors": (market or {}).get("competitors", []),
+        "has_market": market is not None,
+    }
     flagged = {f.code for f in findings}
 
     pillars = []
@@ -872,6 +969,7 @@ def report(data: dict, manual: list[dict] | None = None, *, brand: str = "") -> 
             "passed": passed,
             "manual": [{**m, "status_label": MANUAL_STATUS[m["status"]]} for m in done if m["pillar"] == key],
             "speed": data.get("speed", []) if key == "technique" else [],
+            "semantic": semantic if key == "on-page" else None,
         })
 
     plan = [{"horizon": HORIZON[f.severity], "title": f.title, "pillar": PILLARS[f.pillar]["label"],
@@ -899,17 +997,33 @@ def report(data: dict, manual: list[dict] | None = None, *, brand: str = "") -> 
                       + (" Données des visiteurs réels (Core Web Vitals) issues du rapport Chrome de Google."
                          if any(s.get("field_data") for s in speeds) else ""),
         })
+    if market is not None:
+        tools.append({
+            "name": "Recherche de mots-clés",
+            "by": "DataForSEO — données Google",
+            "detail": "Volumes de recherche mensuels (issus de Google Ads), positions du site et de ses "
+                      "concurrents dans les résultats Google, mots-clés des concurrents absents du site. "
+                      f"Données du {market.get('fetched_at', '')}.",
+        })
+    if queries:
+        tools.append({
+            "name": "Google Search Console",
+            "by": "Données de Google, accès fourni par l'entreprise",
+            "detail": "Les recherches réelles sur lesquelles le site apparaît dans Google, avec le nombre "
+                      "d'affichages, de clics et la position moyenne sur les trois derniers mois.",
+        })
     tools.append({
         "name": "Recherche Google manuelle",
         "by": "Faite à la main par votre consultant",
         "detail": "Ce que voit un client sur Google : pages indexées, recherche sur la marque, fiche Google, "
-                  "avis, position sur la recherche métier, et recommandations des assistants IA.",
+                  "avis, positions sur les mots-clés étudiés, et recommandations des assistants IA.",
     })
 
     return {
         "url": data["url"], "domain": urlparse(data["url"]).netloc.removeprefix("www."),
         "brand": brand, "date": data.get("created_at", ""),
-        "score": data["score"], "pages": data["pages"], "counts": data.get("counts", {}),
+        "score": score(findings), "pages": data["pages"],
+        "counts": {sev: sum(f.severity == sev for f in findings) for sev in order},
         "sector": SECTOR_LABEL.get(data.get("sector", ""), ""),
         "pillars": pillars, "plan": plan, "tools": tools,
         "draft": bool(pending), "pending": pending,
