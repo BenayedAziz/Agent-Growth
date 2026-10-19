@@ -275,7 +275,7 @@ Dans l'ordre de probabilité, pas de gravité.
 | **Mise en ligne** : Railway, mot de passe obligatoire, volume persistant | ✅ prêt — [DEPLOIEMENT.md](DEPLOIEMENT.md) |
 | **Audit SEO / GEO présentable au client** : 3 piliers, vitesse, E-E-A-T, sémantique, rapport HTML/PDF | ✅ construit, testé — `ag audit`, ADR-016 |
 | **Mots-clés et concurrents** (DataForSEO, logique d'OpenSEO) | ✅ construit, testé — attend la clé `DATAFORSEO_API_KEY` |
-| **Charte graphique de l'outil** (DA) : couleurs, typographie, logo, ton visuel | ⬜ **à définir** — préalable à l'interface |
+| **Charte graphique de l'outil** (DA) : couleurs, typographie, logo, ton visuel | ⬜ **à définir avec Lovable** — préalable à l'interface |
 | **L'interface** : espace consultant + espace client, agent intégré, validations | ⬜ à construire sur la charte (remplace la console Jinja et Telegram) |
 | Module 2 — Collecte (les connecteurs) | 🔜 le prochain chantier |
 | Modules 3 à 7 | ⬜ |
@@ -303,6 +303,27 @@ ag serve                                     # la console sur http://127.0.0.1:8
   pré-test gratuit et public. La bibliothèque publicitaire de Meta expose par
   API toutes les annonces diffusées dans l'UE (article 39 du DSA) — à confirmer
   dans la documentation officielle avant de construire dessus.
+
+### Notées par le fondateur le 2026-10-19, pour plus tard
+
+- **La charte de l'outil, faite avec Lovable.** Des couleurs qui donnent envie,
+  une UX ultra efficace et facile à comprendre — la cible est un dirigeant
+  sans formation marketing (CLAUDE.md). Le connecteur Lovable est disponible
+  depuis les sessions de travail : on peut générer les maquettes de là.
+- **Google Ads et Meta Ads par MCP.** Repéré :
+  `github.com/irinabuht12-oss/google-ads-meta-ads-mcp`. Vérifié le 2026-10-19 :
+  le dépôt ne contient **aucun code** — seulement de la documentation et des
+  fichiers de configuration qui pointent vers un serveur hébergé payant (Ryze,
+  89 $/mois d'après leur propre tableau). La licence MIT ne couvre donc rien de
+  réutilisable. Leur tableau cite deux alternatives à vérifier avant de choisir :
+  le MCP officiel de Google (`github.com/googleads/google-ads-mcp`, lecture
+  seule, gratuit) et celui de Meta (hébergé par Meta). Les écritures passeront
+  de toute façon par notre file de validation (règle 3).
+- **Higgsfield par MCP** pour la vidéo (voir plus haut).
+- **TikTok Ads, X Ads** : à connecter aussi, par API officielles uniquement
+  (règle 4).
+- **Diffusion et récupération** : brancher les API de chaque canal dans les deux
+  sens — publier (après validation) et rapatrier les résultats pour la mesure.
 
 ## La prochaine chose à faire
 
