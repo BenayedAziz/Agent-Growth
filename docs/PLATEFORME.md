@@ -275,7 +275,7 @@ Dans l'ordre de probabilité, pas de gravité.
 | **Mise en ligne** : Railway, mot de passe obligatoire, volume persistant | ✅ prêt — [DEPLOIEMENT.md](DEPLOIEMENT.md) |
 | **Audit SEO / GEO présentable au client** : 3 piliers, vitesse, E-E-A-T, sémantique, rapport HTML/PDF | ✅ construit, testé — `ag audit`, ADR-016 |
 | **Mots-clés et concurrents** (DataForSEO, logique d'OpenSEO) | ✅ construit, testé — attend la clé `DATAFORSEO_API_KEY` |
-| **Charte graphique de l'outil** (DA) : couleurs, typographie, logo, ton visuel | ⬜ **à définir avec Lovable** — préalable à l'interface |
+| **Charte graphique de l'outil** (DA) : couleurs, typographie, logo, ton visuel | ⬜ **à définir avec Lovable** — prompt prêt : [PROMPT-LOVABLE-CHARTE.md](PROMPT-LOVABLE-CHARTE.md) |
 | **L'interface** : espace consultant + espace client, agent intégré, validations | ⬜ à construire sur la charte (remplace la console Jinja et Telegram) |
 | Module 2 — Collecte (les connecteurs) | 🔜 le prochain chantier |
 | Modules 3 à 7 | ⬜ |
