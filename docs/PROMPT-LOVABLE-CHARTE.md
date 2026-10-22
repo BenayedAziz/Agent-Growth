@@ -2,7 +2,7 @@
 
 À coller tel quel dans Lovable (nouveau projet). Rédigé le 2026-10-22 à partir
 des indications du fondateur : bordeaux, orange énergique, marron terne, un peu
-d'italique, aucune rondeur. Les valeurs exactes des couleurs sont laissées à
+d'italique, aucune rondeur, une police originale, rien qui fasse « généré par IA ». Les valeurs exactes des couleurs sont laissées à
 Lovable.
 
 ---
@@ -25,12 +25,15 @@ Il y a deux espaces :
 - Couleurs : un **bordeaux** profond comme couleur de marque, un **orange énergique** pour l'action et ce qui demande l'attention, un **marron terne** pour les fonds, les textes secondaires et le calme. Choisis toi-même les valeurs exactes et construis autour toute la palette nécessaire (neutres, fonds, bordures, textes, et des couleurs d'état succès / alerte / danger qui s'accordent avec cet univers chaud).
 - **Aucune rondeur : que des angles.** Rayon de bordure à zéro partout — boutons, cartes, champs, badges, modales, avatars, graphiques. Des lignes nettes, une impression d'architecture.
 - **Un peu d'italique**, utilisé avec intention : pour les titres éditoriaux, les accroches ou les chiffres clés — pas partout.
-- Une typographie qui a du caractère pour les titres, et une police très lisible pour les données et les tableaux.
+- **Une police originale**, qui donne une identité au premier regard. Interdites : Inter, Roboto, Open Sans, Lato, Poppins, Montserrat, Space Grotesk, DM Sans, et les polices système — tout ce qu'on voit sur mille outils. Propose-moi 3 associations (une police de titres avec du caractère et une vraie italique, une police de texte très lisible pour les chiffres et les tableaux), explique en une phrase ce que chacune raconte, et applique celle que tu recommandes. Elles doivent être libres d'usage commercial (Google Fonts, Fontshare ou licence libre), car je les réutiliserai dans des rapports PDF.
+
+**Ça ne doit pas avoir l'air fait par une IA**
+Pas de dégradés, pas de violet, pas d'effet verre dépoli, pas d'ombres douces partout, pas d'emojis ni d'icônes « étincelles », pas de grand titre centré sur fond dégradé, pas d'illustrations 3D génériques, pas de cartes toutes identiques alignées par trois. Je veux l'inverse : une mise en page éditoriale, assumée, avec de la hiérarchie et de l'asymétrie quand elle sert, des filets et des aplats francs, comme un magazine économique ou un cabinet de conseil qui a du goût. Chaque choix doit pouvoir se justifier.
 
 **Ce que j'attends**
 1. Une page **« Charte »** dans le projet qui présente :
    - la palette, avec le rôle de chaque couleur (à quoi elle sert, à quoi elle ne sert jamais) et les combinaisons texte/fond autorisées, toutes au contraste WCAG AA minimum ;
-   - la typographie : familles, échelle de tailles, graisses, règles d'usage de l'italique ;
+   - la typographie : les 3 associations proposées, celle retenue, l'échelle de tailles, les graisses, les règles d'usage de l'italique ;
    - la grille, les espacements, les règles d'angles et de bordures ;
    - les composants : boutons (principal, secondaire, danger), champs, cartes, tableaux, badges de gravité (critique / important / amélioration), note sur 100 en jauge, carte de validation avec Valider / Refuser, alertes, navigation latérale ;
    - les couleurs des graphiques (séries, positif/négatif) ;
